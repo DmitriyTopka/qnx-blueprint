@@ -1,0 +1,45 @@
+# Recorded cockpit runs and what Blueprint must say about each.
+# `blueprint demo` replays them without a QNX target, SDP or API key.
+contract: blueprint.yaml
+source: cockpit.c
+scenarios:
+  - name: ok
+    story: The system as designed.
+    expect: pass
+  - name: deadlock
+    story: gps asks nav for a hint while nav is waiting on gps.
+    expect: fail
+    checks: [unexpected-edge, wait-cycle]
+  - name: backdoor
+    story: display reads gps directly, bypassing nav.
+    expect: fail
+    checks: [unexpected-edge]
+  - name: camera-hang
+    story: The camera wedges; display has no protection and freezes.
+    expect: fail
+    checks: [isolation]
+  - name: camera-hang-fixed
+    story: Same wedged camera, display reads it from its own thread.
+    expect: pass
+  - name: camera-dies
+    story: The camera process is killed; display treats the error as fatal.
+    expect: fail
+    checks: [isolation]
+  - name: camera-dies-fixed
+    story: Same kill, display degrades to "camera stale".
+    expect: pass
+  - name: slow-reply
+    story: nav takes 200 ms per route against a 50 ms budget.
+    expect: fail
+    checks: [reply-budget]
+  - name: ok-late
+    story: Trace started on a running system.
+    expect: pass
+  - name: deadlock-late
+    story: The deadlock happened before the trace; pidin shows who waits on whom.
+    expect: fail
+    checks: [wait-cycle]
+  - name: camera-hang-late
+    story: The camera wedged before the trace started.
+    expect: fail
+    checks: [isolation]

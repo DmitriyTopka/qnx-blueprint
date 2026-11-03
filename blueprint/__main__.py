@@ -1,0 +1,228 @@
+"""Command line entry point: python -m blueprint <command> ..."""
+
+from __future__ import annotations
+
+import argparse
+import json
+import sys
+
+import os
+
+from . import checks, contract, explain, ipc, kev, perfetto, report, snapshot, topology
+
+
+def cmd_pairs(args: argparse.Namespace) -> int:
+    trace = kev.read(args.trace)
+    model = ipc.build(trace)
+    t0 = trace.events[0].t_cycles if trace.events else 0
+    shown = 0
+    for tx in model.transactions:
+        if args.pid and args.pid not in (tx.client_pid, tx.server_pid):
+            continue
+        dt = ""
+        if tx.t_reply is not None:
+            dt = f"{(tx.t_reply - tx.t_send) / trace.cycles_per_sec * 1e6:8.1f} us"
+        print(
+            f"{trace.seconds(tx.t_send - t0):9.6f}s "
+            f"{model.name(tx.client_pid)}[{tx.client_pid}/{tx.client_tid}] "
+            f"coid={tx.coid:#x} -> chid={tx.chid if tx.chid is not None else '?'} "
+            f"{model.name(tx.server_pid)}[{tx.server_pid}/{tx.server_tid}] "
+            f"{tx.status:8} {dt} {tx.preview!r}->{tx.reply_preview!r}"
+        )
+        shown += 1
+    print(f"# {shown} transactions, {len(model.connections)} connections, "
+          f"{len(model.channels)} channels, {len(trace.events)} events", file=sys.stderr)
+    return 0
+
+
+def cmd_topology(args: argparse.Namespace) -> int:
+    model = ipc.build(kev.read(args.trace))
+    only = [p for p in args.only.split(",") if p] if args.only else None
+    topo = topology.build(model, only)
+    if args.json:
+        json.dump(topo.to_json(), sys.stdout, indent=2)
+        print()
+    else:
+        print(topology.format_text(topo))
+    return 0
+
+
+def cmd_check(args: argparse.Namespace) -> int:
+    try:
+        con = contract.load(args.contract)
+        trace = kev.read(args.trace)
+    except (OSError, contract.ContractError, kev.KevFormatError) as e:
+        print(f"blueprint: {e}", file=sys.stderr)
+        return 2
+    snap = None
+    snap_path = args.snapshot or os.path.splitext(args.trace)[0] + ".pidin"
+    if os.path.exists(snap_path):
+        snap = snapshot.load(snap_path)
+    elif args.snapshot:
+        print(f"blueprint: snapshot {args.snapshot} not found", file=sys.stderr)
+        return 2
+    findings, topo = checks.run(trace, con, snap)
+    errors = [f for f in findings if f.severity == checks.ERROR]
+    explanations = {}
+    if args.explain:
+        model = ipc.build(trace)
+        with open(args.contract, encoding="utf-8") as f:
+            contract_text = f.read()
+        sources = {}
+        for path in args.source:
+            with open(path, encoding="utf-8") as f:
+                sources[path] = f.read()
+        cache = args.cache or os.path.join(os.path.dirname(os.path.abspath(args.contract)), "explanations")
+        for i, finding in enumerate(findings):
+            if finding.severity != checks.ERROR:
+                continue
+            try:
+                explanations[i] = explain.explain(trace, model, finding, con, contract_text,
+                                                  sources, cache, offline=args.offline)
+            except explain.ExplainError as e:
+                print(f"blueprint: no explanation for '{finding.title}': {e}", file=sys.stderr)
+    result = {
+        "system": con.system, "trace": args.trace, "contract": args.contract,
+        "result": "fail" if errors else "pass",
+        "summary": {"errors": len(errors), "warnings": len(findings) - len(errors)},
+        "findings": [dict(f.to_json(), explanation=explanations[i].to_json() if i in explanations else None)
+                     for i, f in enumerate(findings)],
+        "topology": topo.to_json(),
+    }
+    if args.json:
+        with open(args.json, "w", encoding="utf-8") as f:
+            json.dump(result, f, indent=2)
+    if args.markdown:
+        with open(args.markdown, "a", encoding="utf-8") as f:
+            f.write(_markdown(result, explanations))
+    if args.perfetto or args.html:
+        model = ipc.build(trace)
+        if args.perfetto:
+            perfetto.write(args.perfetto, perfetto.export(trace, model, con.processes, findings))
+        if args.html:
+            with open(args.html, "w", encoding="utf-8") as f:
+                f.write(report.render(trace, model, con, findings, topo, args.trace, explanations))
+    for i, f in enumerate(findings):
+        mark = "FAIL" if f.severity == checks.ERROR else "warn"
+        print(f"{mark}  [{f.check}] {f.title}")
+        print(f"      {f.detail}")
+        if f.events:
+            print(f"      evidence: events {', '.join(map(str, f.events))}")
+        if i in explanations:
+            e = explanations[i]
+            print(f"      why: {e.cause}")
+            print(f"      fix: {e.fix_summary}")
+    if snap is not None:
+        print(f"(thread states from {snap_path})")
+    verdict = "FAIL" if errors else "PASS"
+    print(f"{verdict}: {con.system or 'system'} {len(errors)} errors, "
+          f"{len(findings) - len(errors)} warnings ({args.trace})")
+    return 1 if errors else 0
+
+
+def _markdown(result: dict, explanations: dict) -> str:
+    """Short summary for a CI page (GitHub step summary)."""
+    verdict = "PASS" if result["result"] == "pass" else "FAIL"
+    lines = [f"### Blueprint: {result['system'] or 'system'} {verdict}", "",
+             f"{result['summary']['errors']} errors, {result['summary']['warnings']} warnings "
+             f"in `{result['trace']}`", ""]
+    if result["findings"]:
+        lines += ["| | Check | Finding |", "|---|---|---|"]
+        for f in result["findings"]:
+            mark = "error" if f["severity"] == checks.ERROR else "warning"
+            title = f["title"].replace("|", "\\|")
+            lines.append(f"| {mark} | `{f['check']}` | {title} |")
+        for f in result["findings"]:
+            e = f.get("explanation")
+            if e:
+                lines += ["", f"**{f['title']}**", "", e["cause"], "", f"Fix: {e['fix_summary']}"]
+    return "\n".join(lines) + "\n\n"
+
+
+def cmd_demo(args: argparse.Namespace) -> int:
+    import yaml
+
+    base = os.path.dirname(os.path.abspath(args.scenarios))
+    with open(args.scenarios, encoding="utf-8") as f:
+        spec = yaml.safe_load(f)
+    contract_path = os.path.join(base, spec["contract"])
+    con = contract.load(contract_path)
+    with open(contract_path, encoding="utf-8") as f:
+        contract_text = f.read()
+    sources = {}
+    if spec.get("source"):
+        src = os.path.join(base, spec["source"])
+        with open(src, encoding="utf-8") as f:
+            sources[spec["source"]] = f.read()
+    os.makedirs(args.out, exist_ok=True)
+    cache = os.path.join(base, "explanations")
+    ok_all = True
+    print(f"{'scenario':<20}{'expected':<10}{'got':<6}{'checks':<34}story")
+    for sc in spec["scenarios"]:
+        trace_path = os.path.join(base, "traces", sc["name"] + ".kev")
+        trace = kev.read(trace_path)
+        snap_path = os.path.splitext(trace_path)[0] + ".pidin"
+        snap = snapshot.load(snap_path) if os.path.exists(snap_path) else None
+        findings, topo = checks.run(trace, con, snap)
+        errors = [f for f in findings if f.severity == checks.ERROR]
+        got = "fail" if errors else "pass"
+        got_checks = sorted({f.check for f in errors})
+        ok = got == sc["expect"] and (not sc.get("checks") or got_checks == sorted(sc["checks"]))
+        ok_all &= ok
+        model = ipc.build(trace)
+        explanations = {}
+        for i, finding in enumerate(findings):
+            if finding.severity == checks.ERROR:
+                try:
+                    explanations[i] = explain.explain(trace, model, finding, con, contract_text, sources,
+                                                      cache, offline=not args.online)
+                except explain.ExplainError:
+                    pass
+        stem = os.path.join(args.out, sc["name"])
+        with open(stem + ".html", "w", encoding="utf-8") as f:
+            f.write(report.render(trace, model, con, findings, topo, os.path.relpath(trace_path), explanations))
+        perfetto.write(stem + ".perfetto.json", perfetto.export(trace, model, con.processes, findings))
+        mark = "" if ok else "  <-- UNEXPECTED"
+        print(f"{sc['name']:<20}{sc['expect']:<10}{got:<6}{', '.join(got_checks) or '-':<34}{sc['story']}{mark}")
+    print(f"\nreports in {args.out}/ (open the .html; load .perfetto.json at ui.perfetto.dev)")
+    print("all scenarios behaved as expected" if ok_all else "SOME SCENARIOS DID NOT BEHAVE AS EXPECTED")
+    return 0 if ok_all else 1
+
+
+def main(argv: list[str] | None = None) -> int:
+    parser = argparse.ArgumentParser(prog="blueprint")
+    sub = parser.add_subparsers(dest="command", required=True)
+    p = sub.add_parser("pairs", help="list MsgSend/MsgReceive/MsgReply transactions")
+    p.add_argument("trace", help="path to a .kev file from tracelogger -w")
+    p.add_argument("--pid", type=int, default=0, help="only transactions involving this pid")
+    p.set_defaults(func=cmd_pairs)
+    p = sub.add_parser("topology", help="process-level message graph")
+    p.add_argument("trace", help="path to a .kev file from tracelogger -w")
+    p.add_argument("--only", default="", help="comma-separated process names to keep")
+    p.add_argument("--json", action="store_true", help="print JSON instead of text")
+    p.set_defaults(func=cmd_topology)
+    p = sub.add_parser("check", help="check a trace against an architecture contract")
+    p.add_argument("trace", help="path to a .kev file from tracelogger -w")
+    p.add_argument("--contract", "-c", default="blueprint.yaml", help="contract file")
+    p.add_argument("--json", default="", help="also write the report as JSON to this file")
+    p.add_argument("--perfetto", default="", help="also write a Perfetto (Chrome JSON) trace to this file")
+    p.add_argument("--html", default="", help="also write a single-file HTML report to this file")
+    p.add_argument("--markdown", default="", help="append a Markdown summary to this file (e.g. $GITHUB_STEP_SUMMARY)")
+    p.add_argument("--snapshot", default="", help="pidin output taken when the trace stopped "
+                   "(default: <trace>.pidin next to the trace, if present)")
+    p.add_argument("--explain", action="store_true", help="explain each error with Claude (cached)")
+    p.add_argument("--source", action="append", default=[], help="source file to show Claude (repeatable)")
+    p.add_argument("--offline", action="store_true", help="only use cached explanations, never call the API")
+    p.add_argument("--cache", default="", help="explanation cache directory (default: next to the contract)")
+    p.set_defaults(func=cmd_check)
+    p = sub.add_parser("demo", help="replay the recorded cockpit scenarios (no QNX target needed)")
+    p.add_argument("--scenarios", default=os.path.join("demo", "cockpit", "scenarios.yaml"))
+    p.add_argument("--out", default="out")
+    p.add_argument("--online", action="store_true", help="call Claude for explanations missing from the cache")
+    p.set_defaults(func=cmd_demo)
+    args = parser.parse_args(argv)
+    return args.func(args)
+
+
+if __name__ == "__main__":
+    sys.exit(main())

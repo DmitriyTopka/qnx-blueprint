@@ -1,0 +1,24 @@
+# Architecture contract for the cockpit demo.
+system: cockpit
+processes: [gps, nav, camera, logger, display]
+
+# Who may send messages to whom. Anything else between these processes fails the build.
+allow:
+  - display -> nav
+  - display -> camera
+  - display -> logger
+  - nav -> gps
+  - nav -> logger
+
+# How long a server may keep its client waiting. Measured on the trace clock;
+# under QEMU emulation times are inflated, so keep budgets generous.
+reply_budget_ms:
+  nav: 50
+  default: 20
+
+# The camera is allowed to fail. When it dies or hangs, the display must keep
+# drawing (at least 3 more completed messages to its other servers).
+isolation:
+  camera:
+    must_survive: [display]
+    min_progress: 3

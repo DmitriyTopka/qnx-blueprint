@@ -1,0 +1,154 @@
+# Blueprint
+
+Architecture contracts for QNX 8.0 systems, checked against the kernel trace.
+
+A QNX system is a set of processes that talk through synchronous messages. The
+design usually lives in someone's head or on a whiteboard: display asks nav,
+nav asks gps, nobody calls back up the chain, and a dead camera must not take
+the screen with it. Blueprint lets you write that design down in a few lines of
+YAML and checks a real trace against it. When the system does something the
+design does not allow, the build fails and the report says which process did
+what, with the trace events to prove it.
+
+System Profiler shows you a trace. Blueprint knows what the trace should look
+like and tells you where it does not.
+
+## Try it in one minute
+
+No QNX target, SDP or API key needed. The repository ships traces recorded on
+QNX 8.0 (x86_64, QEMU) from the demo system in `demo/cockpit`.
+
+```
+python3 -m pip install .
+blueprint demo
+```
+
+```
+scenario            expected  got   checks                            story
+ok                  pass      pass  -                                 The system as designed.
+deadlock            fail      fail  unexpected-edge, wait-cycle       gps asks nav for a hint while nav is waiting on gps.
+backdoor            fail      fail  unexpected-edge                   display reads gps directly, bypassing nav.
+camera-hang         fail      fail  isolation                         The camera wedges; display has no protection and freezes.
+camera-hang-fixed   pass      pass  -                                 Same wedged camera, display reads it from its own thread.
+...
+```
+
+Open `out/deadlock.html` for the report, or load `out/deadlock.perfetto.json`
+at [ui.perfetto.dev](https://ui.perfetto.dev) to see every message as an arrow
+between threads.
+
+## The contract
+
+```yaml
+system: cockpit
+processes: [gps, nav, camera, logger, display]
+allow:                      # who may send messages to whom
+  - display -> nav
+  - display -> camera
+  - display -> logger
+  - nav -> gps
+  - nav -> logger
+reply_budget_ms:            # how long a server may keep a client waiting
+  nav: 50
+  default: 20
+isolation:                  # when camera dies or hangs, display keeps working
+  camera:
+    must_survive: [display]
+    min_progress: 3
+```
+
+## Checks
+
+| Check | Fails when |
+|---|---|
+| `unexpected-edge` | a process sends messages to a server the contract does not allow |
+| `wait-cycle` | threads end the trace waiting on each other in a loop (deadlock) |
+| `stuck-reply` | a server took a message and never replied |
+| `reply-budget` | a server replied, but slower than its budget |
+| `isolation` | a process died or stopped answering and took a protected process down with it |
+| `no-traffic` | the trace shows no answered message at all, so it proves nothing |
+
+Every finding lists the trace events it is based on. Exit code 0 means pass,
+1 means the contract is violated, 2 means bad input.
+
+## Record a trace on your target
+
+```
+tracelogger -w -s 5 -f /tmp/run.kev      # wide mode is required
+pidin > /tmp/run.pidin                   # thread states when the trace stopped
+```
+
+Copy both files to the host and run:
+
+```
+blueprint check run.kev --contract blueprint.yaml --html report.html --perfetto run.perfetto.json
+```
+
+The `.pidin` file next to the trace is picked up automatically. It matters when
+the system was already stuck before tracing started: blocked threads produce no
+events, and only `pidin` shows who waits on whom.
+
+## Explanations by Claude
+
+```
+export ANTHROPIC_API_KEY=...
+blueprint check run.kev -c blueprint.yaml --explain --source src/display.c --html report.html
+```
+
+The checks decide what is wrong. Claude is only asked to explain one finding at
+a time: it gets the trace events behind it (each with an id), the contract and
+the source you pass, and returns the cause, the QNX call at fault and a patch.
+Event ids it did not receive are removed, and an explanation left with no real
+evidence is marked unverified. Answers are cached next to the contract, so the
+demo and CI runs work offline. One explanation costs about 0.04 USD with
+`claude-opus-5-5`.
+
+## In CI
+
+```yaml
+- uses: <owner>/qnx-blueprint@v1
+  with:
+    trace: traces/nightly.kev
+    contract: blueprint.yaml
+```
+
+The action writes `report.html`, `report.json` and a Perfetto trace to
+`blueprint-report/`, adds a summary to the job page and fails the job on any
+violation.
+
+## What it uses from QNX
+
+| File | QNX feature | Why |
+|---|---|---|
+| `blueprint/kev.py` | kernel trace file format, instrumented kernel `procnto-smp-instr` | reads `tracelogger` output on any host, no SDP needed |
+| `blueprint/ipc.py` | `MsgSendv`, `MsgSendvnc`, `MsgReceivev`, `MsgReplyv`, `MsgError` kernel calls; COMM `SND_MESSAGE`, `REPLY_MESSAGE`; `ConnectAttach`, `ChannelCreate` | rebuilds every message transaction with client, server, channel and timing |
+| `blueprint/ipc.py` | thread states `SEND`, `RECEIVE`, `REPLY` | knows who is blocked on whom when the trace ends |
+| `blueprint/snapshot.py` | `pidin` blocked-on column | sees waits that started before the trace |
+| `blueprint/checks.py` | synchronous message passing semantics | deadlock, stuck server, reply budget, isolation |
+| `demo/cockpit/cockpit.c` | `name_attach`, `name_open`, `MsgSend`, `MsgReceive`, `MsgReply`, pulses, `_NTO_CHF_UNBLOCK` | a five-process system with realistic faults |
+
+One thing the demo shows that surprises people: a `TimerTimeout` on `MsgSend`
+does not protect a client from a wedged server. Channels created by
+`name_attach()` have `_NTO_CHF_UNBLOCK` set, so a REPLY-blocked client that
+times out stays blocked until the server handles the unblock pulse. The fixed
+display reads the camera from its own thread instead.
+
+## Limits
+
+- Times come from the trace clock. Under QEMU emulation they are inflated, so
+  budgets in the demo are generous. Measure absolute latencies on hardware.
+- Wide mode (`tracelogger -w`) is required: the fast mode drops the arguments
+  that tie a message to its connection and channel.
+- Priority inversion is not reported: a QNX server inherits its client's
+  priority, so a naive detector would mostly report false positives.
+
+## Building the demo system
+
+`demo/cockpit` builds with `qcc` from QNX SDP 8.0 and runs in a QEMU image made
+with `mkqnximage`. `demo/cockpit/cockpit-run.sh` records one scenario on the
+target. No SDP files, headers or images are included in this repository.
+
+## License
+
+Apache-2.0. QNX is a trademark of BlackBerry Limited. This project is not
+affiliated with or endorsed by BlackBerry.

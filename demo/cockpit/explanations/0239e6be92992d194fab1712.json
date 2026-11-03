@@ -1,0 +1,28 @@
+{
+  "raw": {
+    "cause": "camera was destroyed at 3274.8 ms (91117). On display's next tick, its synchronous MsgSend() to camera on coid 0x40000002 failed because the server was gone. In the unfixed build, run_display() treats that -1 as fatal (\"camera failed, giving up\", return 1), so display exited 30 ms later (95162) even though nav and logger were still available. That breaks the isolation contract.",
+    "evidence_event_ids": [
+      83151,
+      83171,
+      91117,
+      95162
+    ],
+    "qnx_call": "MsgSend in display (to camera, error return treated as fatal in run_display)",
+    "fix_summary": "Do not let a camera MsgSend failure end the display loop. Either run with COCKPIT_FIXED=1, where a separate camera_reader thread talks to camera and the main loop only reads last_frame, or make the inline path degrade: on -1, close the connection, show \"camera stale\", and keep drawing (optionally retrying name_open later). The reader thread is the better fix, because it also covers a camera that hangs instead of dying.",
+    "fix_patch": "--- a/cockpit.c\n+++ b/cockpit.c\n@@ run_display\n-        } else if (ask(camera, MSG_FRAME, seq, \"frame?\", &frame) == -1) {\n-            fprintf(stderr, \"display: camera failed: %s, giving up\\n\", strerror(errno));\n-            return 1;\n+        } else if (camera == -1 || ask(camera, MSG_FRAME, seq, \"frame?\", &frame) == -1) {\n+            if (camera != -1) {\n+                fprintf(stderr, \"display: camera failed: %s, continuing without it\\n\", strerror(errno));\n+                name_close(camera);\n+                camera = -1;\n+            }\n+            snprintf(frame.text, sizeof(frame.text), \"camera stale\");\n         }",
+    "doc_refs": [
+      "MsgSend",
+      "name_open",
+      "Synchronous message passing"
+    ],
+    "confidence": "high"
+  },
+  "usage": {
+    "model": "claude-opus-5-5",
+    "input_tokens": 6633,
+    "output_tokens": 681,
+    "cache_read_input_tokens": 1198,
+    "cache_creation_input_tokens": 0
+  },
+  "finding": "camera died and took display down with it"
+}

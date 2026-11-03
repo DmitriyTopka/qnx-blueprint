@@ -1,0 +1,18 @@
+[project]
+name = "qnx-blueprint"
+version = "0.1.0.dev0"
+description = "Architecture contracts for QNX 8.0 systems, checked against kernel traces"
+readme = "README.md"
+license = "Apache-2.0"
+requires-python = ">=3.10"
+dependencies = ["PyYAML>=6"]
+
+[project.scripts]
+blueprint = "blueprint.__main__:main"
+
+[build-system]
+requires = ["setuptools>=68"]
+build-backend = "setuptools.build_meta"
+
+[tool.setuptools]
+packages = ["blueprint"]

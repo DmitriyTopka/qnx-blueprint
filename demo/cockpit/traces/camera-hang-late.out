@@ -1,0 +1,6 @@
+display 00: route via pos 50.450 | frame 1
+display 01: route via pos 50.451 | frame 2
+display 02: route via pos 50.452 | frame 3
+display 03: route via pos 50.453 | frame 4
+display 04: route via pos 50.454 | frame 5
+exit: still-running
