@@ -37,6 +37,9 @@ Open `out/deadlock.html` for the report, or load `out/deadlock.perfetto.json`
 at [ui.perfetto.dev](https://ui.perfetto.dev) to see every message as an arrow
 between threads.
 
+A step-by-step tutorial in the QNX codelab format is in
+[docs/codelab](docs/codelab/blueprint-architecture-contracts.md).
+
 ## The contract
 
 ```yaml
