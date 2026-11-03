@@ -120,22 +120,34 @@ def cmd_check(args: argparse.Namespace) -> int:
     return 1 if errors else 0
 
 
+def _md(text: str) -> str:
+    """Make text from a trace or a model safe for a Markdown table or paragraph.
+
+    Collapses newlines and escapes the characters that would start links,
+    images, HTML, emphasis or table cells.
+    """
+    text = " ".join(str(text).split())
+    for ch in "\\`*_{}[]()<>#+!|~":
+        text = text.replace(ch, "\\" + ch)
+    return text
+
+
 def _markdown(result: dict, explanations: dict) -> str:
     """Short summary for a CI page (GitHub step summary)."""
     verdict = "PASS" if result["result"] == "pass" else "FAIL"
-    lines = [f"### Blueprint: {result['system'] or 'system'} {verdict}", "",
+    lines = [f"### Blueprint: {_md(result['system'] or 'system')} {verdict}", "",
              f"{result['summary']['errors']} errors, {result['summary']['warnings']} warnings "
-             f"in `{result['trace']}`", ""]
+             f"in {_md(result['trace'])}", ""]
     if result["findings"]:
         lines += ["| | Check | Finding |", "|---|---|---|"]
         for f in result["findings"]:
             mark = "error" if f["severity"] == checks.ERROR else "warning"
-            title = f["title"].replace("|", "\\|")
-            lines.append(f"| {mark} | `{f['check']}` | {title} |")
+            lines.append(f"| {mark} | {_md(f['check'])} | {_md(f['title'])} |")
         for f in result["findings"]:
             e = f.get("explanation")
             if e:
-                lines += ["", f"**{f['title']}**", "", e["cause"], "", f"Fix: {e['fix_summary']}"]
+                lines += ["", f"**{_md(f['title'])}**", "", _md(e["cause"]), "",
+                          f"Fix: {_md(e['fix_summary'])}"]
     return "\n".join(lines) + "\n\n"
 
 
