@@ -8,6 +8,7 @@ deleting what you did not intend is the part that makes it a contract.
 
 from __future__ import annotations
 
+import json
 import math
 import re
 import statistics
@@ -21,6 +22,19 @@ SYSTEM = re.compile(
     r"^(procnto.*|devb-.*|devc-.*|devf-.*|devnp-.*|io-.*|pipe|slogger2?|random|mqueue|fsevmgr|"
     r"pci-server|dumper|sshd|sshd-.*|qconn|dhcpcd|inetd|ksh|sh|login|tracelogger|pidin|slay|"
     r"on|sleep|cat|ls|secpol.*|smmuman|acpi.*|pid\d+)$")
+
+
+_PLAIN = re.compile(r"^[A-Za-z0-9_.+-]+$")
+# What the contract accepts as a process name (contract.ARROW uses [\w.-]).
+_NAME = re.compile(r"^[\w.-]+$")
+
+
+def _q(text: str) -> str:
+    """A YAML scalar for a name that came from the trace. Process names are
+    written by the system being checked, so anything beyond a plain name is
+    quoted (a JSON string is a valid YAML double-quoted scalar) and cannot
+    add keys or list items to the contract."""
+    return text if _PLAIN.match(text) else json.dumps(text)
 
 
 def _nice(ms: float) -> float:
@@ -43,8 +57,13 @@ def select(model: ipc.IpcModel, only: Optional[Sequence[str]] = None) -> Tuple[L
         talking.add(model.name(tx.client_pid))
         talking.add(model.name(tx.server_pid))
     if only:
+        bad = [p for p in only if not _NAME.match(p)]
+        if bad:
+            raise ValueError(f"{bad[0]!r} cannot be a process name in a contract")
         return [p for p in only], sorted(talking - set(only))
-    candidates = {p for p in talking if not SYSTEM.match(p)}
+    # A name the contract cannot express is left out (and reported) rather
+    # than written into the draft.
+    candidates = {p for p in talking if not SYSTEM.match(p) and _NAME.match(p)}
     # Keep only processes that exchange messages with another candidate.
     linked = set()
     for tx in model.transactions:
@@ -74,8 +93,8 @@ def draft(trace: kev.Trace, model: ipc.IpcModel, processes: List[str], source: s
         "# It lists what the system did. Delete every edge you did not design, set the",
         f"# budgets you mean (these are {headroom:g}x the slowest reply in this one trace;",
         "# under emulation give more), then run: blueprint check <trace> -c <this file>",
-        f"system: {system}",
-        "processes: [" + ", ".join(processes) + "]",
+        f"system: {_q(system)}",
+        "processes: [" + ", ".join(_q(p) for p in processes) + "]",
         "allow:",
     ]
     for (client, server), e in sorted(topo.edges.items()):
@@ -87,7 +106,7 @@ def draft(trace: kev.Trace, model: ipc.IpcModel, processes: List[str], source: s
         if e.open:
             extra.append(f"{e.open} unanswered")
         note = f"{e.messages} messages" + (", " + ", ".join(extra) if extra else "")
-        lines.append(f"  - {client} -> {server}".ljust(34) + f"# {note}")
+        lines.append(f"  - {_q(f'{client} -> {server}')}".ljust(34) + f"# {note}")
     if not any(c != s for c, s in topo.edges):
         lines.append("  []  # the trace shows no messages between these processes")
     budgets = {server: _nice(max(v) * headroom) for server, v in lat.items() if v}
@@ -95,15 +114,15 @@ def draft(trace: kev.Trace, model: ipc.IpcModel, processes: List[str], source: s
         lines.append("reply_budget_ms:")
         for server in sorted(budgets):
             v = lat[server]
-            lines.append(f"  {server}: {budgets[server]:g}".ljust(34)
+            lines.append(f"  {_q(server)}: {budgets[server]:g}".ljust(34)
                          + f"# slowest reply seen {max(v):.1f} ms, median {statistics.median(v):.2f} ms")
         lines.append(f"  default: {max(budgets.values()):g}")
     pairs = sorted((c, s) for c, s in topo.edges if c != s)
     client, server = pairs[0] if pairs else ("client", "server")
     lines += [
         "# isolation:                     # which process must keep working when another fails",
-        f"#   {server}:",
-        f"#     must_survive: [{client}]",
+        f"#   {_q(server)}:",
+        f"#     must_survive: [{_q(client)}]",
         "#     min_progress: 3",
         "# priority_inversion_ms: 2       # experimental, see the README",
     ]

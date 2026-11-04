@@ -81,5 +81,30 @@ class Command(unittest.TestCase):
         self.assertIn("--only", err)
 
 
+class HostileNames(unittest.TestCase):
+    """Process names come from the traced system, not from the user."""
+
+    def test_names_cannot_add_keys_or_edges(self):
+        trace = kev.read(os.path.join(TRACES, "ok.kev"))
+        model = ipc.build(trace)
+        pid = next(p for p, n in model.names.items() if n == "gps")
+        model.names[pid] = "gps]\nallow:\n  - display -> gps\nx: [y"
+        processes, _ = init_contract.select(model, None)
+        text = init_contract.draft(trace, model, processes, "ok.kev", system="a: b")
+        doc = yaml.safe_load(text)
+        con = contract.parse(doc)
+        self.assertEqual(con.system, "a: b")                       # quoted, not a new key
+        self.assertEqual(set(doc), {"system", "processes", "allow", "reply_budget_ms"})
+        self.assertNotIn(model.names[pid], con.processes)          # left out, not written
+        self.assertNotIn(("display", "gps"), con.allow)
+        self.assertEqual(con.allow, {("display", "camera"), ("display", "logger"), ("display", "nav"),
+                                     ("nav", "logger")})
+
+    def test_only_rejects_names_a_contract_cannot_hold(self):
+        trace = kev.read(os.path.join(TRACES, "ok.kev"))
+        with self.assertRaises(ValueError):
+            init_contract.select(ipc.build(trace), ["nav", "gps\nx"])
+
+
 if __name__ == "__main__":
     unittest.main()

@@ -136,7 +136,11 @@ def cmd_init(args: argparse.Namespace) -> int:
         return 2
     model = ipc.build(trace)
     only = [p for p in args.only.split(",") if p] if args.only else None
-    processes, left_out = init_contract.select(model, only)
+    try:
+        processes, left_out = init_contract.select(model, only)
+    except ValueError as e:
+        print(f"blueprint: {e}", file=sys.stderr)
+        return 2
     if not processes:
         print("blueprint: no two application processes exchange messages in this trace; "
               "name them with --only", file=sys.stderr)
