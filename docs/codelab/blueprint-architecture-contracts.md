@@ -232,6 +232,40 @@ contract, so the same finding is never paid for twice.
 
 ---
 
+## Let the kernel enforce it
+Duration: 5:00
+
+The contract can also become part of a QNX security policy. Generate the
+channel rules:
+
+```console
+blueprint secpol -c blueprint.yaml --attach sensor=/dev/name/local/sensor -o mine.secpol
+```
+
+Each process gets a type (`sensor_t`, `ui_t`, ...), each allowed edge becomes
+`allow ui_t fusion_t:channel connect;`, and each server may attach its name.
+Compile it with `secpolcompile -o mine.bin mine.secpol` to check the syntax.
+To enforce it, merge it into your system policy and start each process with
+its type, for example `on -T sensor_t sensor`.
+
+If you build your policy with `secpolgenerate`, compare what it learned with
+the contract before you ship:
+
+```console
+cat /dev/secpolgenerate/policy > learned.secpol      # on the target
+blueprint secpol -c blueprint.yaml --check learned.secpol
+```
+
+Negative
+: secpolgenerate learns from kernel trace events. Do not run `tracelogger`
+while it is learning: the learned policy then declares your types but has no
+rules for them.
+
+A connection the policy does not allow fails in the kernel with EPERM, so
+`name_open()` returns -1 and `strerror(errno)` says "Operation not permitted".
+
+---
+
 ## Add it to CI
 Duration: 3:00
 
@@ -260,6 +294,7 @@ Duration: 1:00
 - How to write the intended architecture down as a contract.
 - How to record a wide kernel trace and a `pidin` snapshot on a target.
 - How to check a trace locally and in CI, and read the report in Perfetto.
+- How to turn the contract into security policy rules and check a learned policy against it.
 
 Questions and ideas are welcome in the
 [issue tracker](https://github.com/DmitriyTopka/qnx-blueprint/issues).

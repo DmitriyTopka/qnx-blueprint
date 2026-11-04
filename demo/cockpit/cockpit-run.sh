@@ -3,6 +3,8 @@
 #   cockpit-run.sh <scenario> [fixed]
 # Scenarios: ok deadlock backdoor camera-hang camera-dies slow-reply prio-inversion
 # LATE=1 starts the trace after the system is up (no ChannelCreate/ConnectAttach in it).
+# SECPOL=1 starts each process with its security type (on -T <name>_t), for a
+# system booted with a policy from `blueprint secpol`.
 # Writes /tmp/<scenario>[-fixed].kev, .pidin and .out
 SC=${1:-ok}
 NAME=$SC
@@ -11,6 +13,14 @@ if [ "$2" = fixed ]; then
     NAME=$SC-fixed
 fi
 export COCKPIT_FAULT=$SC
+# Start a role, with its security type when SECPOL=1.
+run() {
+    if [ -n "$SECPOL" ]; then
+        on -T "${1}_t" "$@"
+    else
+        "$@"
+    fi
+}
 TRACE=/tmp/$NAME.kev
 OUT=/tmp/$NAME.out
 
@@ -29,9 +39,9 @@ if [ -n "$LATE" ]; then
     NAME=$NAME-late
     TRACE=/tmp/$NAME.kev
     OUT=/tmp/$NAME.out
-    logger & gps & camera & nav &
+    run logger & run gps & run camera & run nav &
     sleep 1
-    display 80 >$OUT 2>&1 &
+    run display 80 >$OUT 2>&1 &
     sleep 1
     tracelogger -w -s 3 -f $TRACE >/dev/null 2>&1 &
     TL=$!
@@ -40,13 +50,13 @@ else
     $TLPRIO tracelogger -w -s 6 -f $TRACE >/dev/null 2>&1 &
     TL=$!
     sleep 1
-    logger & gps & camera & nav &
+    run logger & run gps & run camera & run nav &
     sleep 1
     if [ "$SC" = prio-inversion ]; then
         media &
         sleep 0.5
     fi
-    display 50 >$OUT 2>&1 &
+    run display 50 >$OUT 2>&1 &
 fi
 if [ "$SC" = camera-dies ]; then
     sleep 1

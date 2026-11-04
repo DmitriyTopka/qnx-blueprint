@@ -123,6 +123,41 @@ The `.pidin` file next to the trace is picked up automatically. It matters when
 the system was already stuck before tracing started: blocked threads produce no
 events, and only `pidin` shows who waits on whom.
 
+## Let the kernel enforce it
+
+A trace shows what the system did. A QNX security policy decides what it may
+do. Blueprint writes the channel rules of a policy from the contract:
+
+```
+blueprint secpol -c blueprint.yaml --attach nav=/dev/name/local/cockpit-nav ... -o cockpit.secpol
+```
+
+```
+type display_t;
+allow_attach nav_t /dev/name/local/cockpit-nav;
+# display -> nav
+allow display_t nav_t:channel connect;
+```
+
+The output compiles with `secpolcompile`. It covers only the processes in the
+contract, so merge it into the policy for the whole system.
+
+It also works the other way. `secpolgenerate` learns a policy by watching the
+system, and it learns whatever happened, a bad build included. Check what it
+learned before you ship it:
+
+```
+$ blueprint secpol -c blueprint.yaml --check learned.secpol
+FAIL  [secpol] policy lets display connect to gps, which the contract forbids
+      learned.secpol line 202 allows display_t to connect to gps_t. ...
+```
+
+`blueprint check run.kev --secpol learned.secpol` runs the same comparison
+next to the trace checks. On QNX 8.0 in QEMU, with display held to a policy
+that matches the contract, the backdoor build fails in the kernel:
+`cockpit: cannot open cockpit-gps: Operation not permitted`. How the demo
+policies were made is in [demo/cockpit/secpol](demo/cockpit/secpol/README.md).
+
 ## Explanations by Claude
 
 ```
@@ -160,6 +195,7 @@ violation.
 | `blueprint/ipc.py` | thread states `SEND`, `RECEIVE`, `REPLY` | knows who is blocked on whom when the trace ends |
 | `blueprint/checks.py` | thread state events with priority, `_NTO_CHF_FIXED_PRIORITY` from `ChannelCreate` | priority inversion: who ran while a waiting client's server sat READY |
 | `blueprint/snapshot.py` | `pidin` blocked-on column | sees waits that started before the trace |
+| `blueprint/secpol.py` | security policy language: `type`, `allow_attach`, `channel connect`, the `channel_connect` ability; `secpolcompile`, `secpolgenerate`, `on -T` | turns the contract into kernel-enforced channel rules and checks a learned policy against it |
 | `blueprint/record.py` | `tracelogger -w`, `slay -s KILL`, `pidin` on the target over ssh | kills a process while the trace runs, so its death and the reaction of its clients are both in the trace |
 | `blueprint/checks.py` | synchronous message passing semantics | deadlock, stuck server, reply budget, isolation |
 | `demo/cockpit/cockpit.c` | `name_attach`, `name_open`, `MsgSend`, `MsgReceive`, `MsgReply`, pulses, `_NTO_CHF_UNBLOCK` | a five-process system with realistic faults |

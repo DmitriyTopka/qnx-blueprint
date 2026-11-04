@@ -1,0 +1,7 @@
+# what secpolgenerate might record after a backdoor build ran once
+attribute hmi;
+type display_t, hmi;
+type nav_t; type gps_t; type camera_t; type logger_t;
+allow display_t { nav_t camera_t logger_t } : channel connect;
+allow nav_t self:ability { nonroot channel_connect:gps_t,logger_t };
+allow hmi gps_t:channel connect;   # the backdoor

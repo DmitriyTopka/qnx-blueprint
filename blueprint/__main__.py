@@ -9,7 +9,7 @@ import sys
 
 import os
 
-from . import checks, contract, explain, ipc, kev, perfetto, record, report, snapshot, topology
+from . import checks, contract, explain, ipc, kev, perfetto, record, report, secpol, snapshot, topology
 
 
 def cmd_pairs(args: argparse.Namespace) -> int:
@@ -63,6 +63,13 @@ def cmd_check(args: argparse.Namespace) -> int:
         print(f"blueprint: snapshot {args.snapshot} not found", file=sys.stderr)
         return 2
     findings, topo = checks.run(trace, con, snap)
+    if args.secpol:
+        try:
+            with open(args.secpol, encoding="utf-8") as f:
+                findings += secpol.compare(con, secpol.parse(f.read()), args.secpol, _types(args))
+        except (OSError, secpol.PolicyError) as e:
+            print(f"blueprint: {e}", file=sys.stderr)
+            return 2
     errors = [f for f in findings if f.severity == checks.ERROR]
     explanations = {}
     if args.explain:
@@ -118,6 +125,45 @@ def cmd_check(args: argparse.Namespace) -> int:
     verdict = "FAIL" if errors else "PASS"
     print(f"{verdict}: {con.system or 'system'} {len(errors)} errors, "
           f"{len(findings) - len(errors)} warnings ({args.trace})")
+    return 1 if errors else 0
+
+
+def _types(args: argparse.Namespace) -> dict:
+    return {k: v[-1] for k, v in secpol.parse_pairs(args.type, "type").items()}
+
+
+def cmd_secpol(args: argparse.Namespace) -> int:
+    try:
+        con = contract.load(args.contract)
+        types = _types(args)
+        if args.check:
+            with open(args.check, encoding="utf-8") as f:
+                policy = secpol.parse(f.read())
+        else:
+            text = secpol.generate(con, secpol.parse_pairs(args.attach, "attach"), types,
+                                   os.path.basename(args.contract))
+    except (OSError, contract.ContractError, secpol.PolicyError) as e:
+        print(f"blueprint: {e}", file=sys.stderr)
+        return 2
+    if not args.check:
+        if args.out:
+            with open(args.out, "w", encoding="utf-8") as f:
+                f.write(text)
+            print(f"wrote {args.out}", file=sys.stderr)
+        else:
+            sys.stdout.write(text)
+        return 0
+    try:
+        findings = secpol.compare(con, policy, args.check, types)
+    except secpol.PolicyError as e:
+        print(f"blueprint: {e}", file=sys.stderr)
+        return 2
+    errors = [f for f in findings if f.severity == checks.ERROR]
+    for f in findings:
+        print(f"{'FAIL' if f.severity == checks.ERROR else 'warn'}  [{f.check}] {f.title}")
+        print(f"      {f.detail}")
+    print(f"{'FAIL' if errors else 'PASS'}: {args.check} {len(errors)} errors, "
+          f"{len(findings) - len(errors)} warnings against {args.contract}")
     return 1 if errors else 0
 
 
@@ -259,7 +305,21 @@ def main(argv: list[str] | None = None) -> int:
     p.add_argument("--source", action="append", default=[], help="source file to show Claude (repeatable)")
     p.add_argument("--offline", action="store_true", help="only use cached explanations, never call the API")
     p.add_argument("--cache", default="", help="explanation cache directory (default: next to the contract)")
+    p.add_argument("--secpol", default="", help="also compare this security policy (text form) with the contract")
+    p.add_argument("--type", action="append", default=[], metavar="PROCESS=TYPE",
+                   help="security type of a process if not <process>_t (repeatable)")
     p.set_defaults(func=cmd_check)
+    p = sub.add_parser("secpol", help="write QNX security policy channel rules from the contract, "
+                       "or compare a policy with it")
+    p.add_argument("--contract", "-c", default="blueprint.yaml", help="contract file")
+    p.add_argument("--attach", action="append", default=[], metavar="PROCESS=PATH",
+                   help="path a server registers, e.g. nav=/dev/name/local/cockpit-nav (repeatable)")
+    p.add_argument("--type", action="append", default=[], metavar="PROCESS=TYPE",
+                   help="security type of a process if not <process>_t (repeatable)")
+    p.add_argument("--out", "-o", default="", help="write the policy here instead of stdout")
+    p.add_argument("--check", default="", metavar="POLICY",
+                   help="compare this policy (text form) with the contract instead of writing one")
+    p.set_defaults(func=cmd_secpol)
     p = sub.add_parser("record", help="record a trace on a running QNX target over ssh, "
                        "optionally killing processes, then check it")
     p.add_argument("host", help="ssh destination, e.g. root@192.168.1.20")
