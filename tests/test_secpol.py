@@ -91,6 +91,11 @@ class LearnedOnQnx(unittest.TestCase):
         self.assertGreater(len(pol.types), 30)        # the whole system, not only the cockpit
         self.assertEqual(secpol.compare(CONTRACT, pol), [])
 
+    def test_policy_of_the_fully_secure_image_matches(self):
+        pol = secpol.parse(read("secure-aarch64.secpol"))
+        self.assertIn("sshd_t", pol.types)
+        self.assertEqual(secpol.compare(CONTRACT, pol), [])
+
     def test_one_backdoor_run_is_enough_to_widen_the_policy(self):
         findings = secpol.compare(CONTRACT, secpol.parse(read("learned-backdoor.secpol")))
         self.assertEqual(errors(findings), ["policy lets display connect to gps, which the contract forbids"])

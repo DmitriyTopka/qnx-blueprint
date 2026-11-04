@@ -78,12 +78,13 @@ as a `wait-cycle` finding.
 
 ## Can the kernel enforce the contract?
 
-Partly, today. `blueprint secpol` writes the channel rules of a QNX security
-policy from the contract, and `--check` compares any policy with the
-contract. With display held to a policy that matches the contract, the
-backdoor build fails in the kernel with "Operation not permitted". We have
-not yet built a fully secure image: with only what one learning session
-collected, sshd refused our key login in `--secpol=secure` mode.
+Yes. `blueprint secpol` writes the channel rules of a QNX security policy
+from the contract, and `--check` compares any policy with the contract. On a
+QNX 8.0 aarch64 image booted in `--secpol=secure` mode, with a policy that
+matches the contract, ssh and tracing work, the healthy cockpit passes, and
+both backdoors (through `name_open()` and through `open()` on the resource
+manager) fail in the kernel with "Operation not permitted". The details are
+in `demo/cockpit/secpol/README.md`.
 
 ## How do I write a contract for a system that already exists?
 
