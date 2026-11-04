@@ -17,10 +17,12 @@ QNX Everywhere license covers that.
 
 ## Which targets has it been run on?
 
-QNX 8.0.0, x86_64, in QEMU with software emulation (TCG) on an Apple M2 Pro
-host. We have not run it on aarch64 or on a board yet. The trace format is
-the same across architectures, but until we have checked a real aarch64
-trace we don't claim it works there.
+QNX 8.0.0 in QEMU with software emulation (TCG) on an Apple M2 Pro host, on
+two architectures: x86_64, and aarch64le on the QEMU virt board (cortex-a57).
+We rebuilt the demo for aarch64 with `qcc -Vgcc_ntoaarch64le`, recorded the
+same eleven scenarios there, and every one gave the same result as on x86_64
+without a change to Blueprint. Four of those traces are test fixtures in
+`tests/data/aarch64`. We have not run it on a board.
 
 ## What does tracing cost the system?
 

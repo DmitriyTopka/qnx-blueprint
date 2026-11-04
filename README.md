@@ -245,7 +245,19 @@ display reads the camera from its own thread instead.
 ## Building the demo system
 
 `demo/cockpit` builds with `qcc` from QNX SDP 8.0 and runs in a QEMU image made
-with `mkqnximage`. `demo/cockpit/cockpit-run.sh` records one scenario on the
+with `mkqnximage`, on x86_64 or on aarch64 (`--arch=aarch64le`, which needs the
+`com.qnx.qnx800.target.qemuvirt` and `com.qnx.qnx800.target.driver.virtio.startup`
+packages). The same scenarios give the same results on both. On the virt board
+the block device has to come first on the QEMU command line, since virtio-mmio
+addresses follow the order of the devices:
+
+```
+qemu-system-aarch64 -machine virt-4.2 -cpu cortex-a57 -smp 2 -m 1G \
+  -drive file=output/disk-qemu.vmdk,if=none,id=drv0 -device virtio-blk-device,drive=drv0 \
+  -netdev user,id=net0,hostfwd=tcp::2223-:22 -device virtio-net-device,netdev=net0 \
+  -kernel output/ifs.bin -display none -serial file:serial.log
+```
+ `demo/cockpit/cockpit-run.sh` records one scenario on the
 target. No SDP files, headers or images are included in this repository.
 
 ## License
