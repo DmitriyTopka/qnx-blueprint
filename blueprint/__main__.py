@@ -287,7 +287,7 @@ def cmd_demo(args: argparse.Namespace) -> int:
     os.makedirs(args.out, exist_ok=True)
     cache = os.path.join(base, "explanations")
     ok_all = True
-    print(f"{'scenario':<20}{'expected':<10}{'got':<6}{'checks':<34}story")
+    print(f"{'scenario':<22}{'expected':<10}{'got':<6}{'checks':<34}story")
     for sc in spec["scenarios"]:
         trace_path = os.path.join(base, "traces", sc["name"] + ".kev")
         trace = kev.read(trace_path)
@@ -313,7 +313,7 @@ def cmd_demo(args: argparse.Namespace) -> int:
             f.write(report.render(trace, model, con, findings, topo, os.path.relpath(trace_path), explanations))
         perfetto.write(stem + ".perfetto.json", perfetto.export(trace, model, con.processes, findings))
         mark = "" if ok else "  <-- UNEXPECTED"
-        print(f"{sc['name']:<20}{sc['expect']:<10}{got:<6}{', '.join(got_checks) or '-':<34}{sc['story']}{mark}")
+        print(f"{sc['name']:<22}{sc['expect']:<10}{got:<6}{', '.join(got_checks) or '-':<34}{sc['story']}{mark}")
     print(f"\nreports in {args.out}/ (open the .html; load .perfetto.json at ui.perfetto.dev)")
     print("all scenarios behaved as expected" if ok_all else "SOME SCENARIOS DID NOT BEHAVE AS EXPECTED")
     return 0 if ok_all else 1

@@ -15,11 +15,11 @@ scenarios:
     expect: fail
     checks: [unexpected-edge]
   - name: camera-hang
-    story: The camera wedges; display has no protection and freezes.
+    story: The camera stops answering; display has no protection and freezes.
     expect: fail
     checks: [isolation]
   - name: camera-hang-fixed
-    story: Same wedged camera, display reads it from its own thread.
+    story: Same stuck camera, display reads it from its own thread.
     expect: pass
   - name: camera-dies
     story: The camera process is killed; display treats the error as fatal.
@@ -40,7 +40,7 @@ scenarios:
     expect: fail
     checks: [wait-cycle]
   - name: camera-hang-late
-    story: The camera wedged before the trace started.
+    story: The camera stopped answering before the trace started.
     expect: fail
     checks: [isolation]
   - name: prio-inversion

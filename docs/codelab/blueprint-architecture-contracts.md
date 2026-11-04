@@ -4,8 +4,8 @@ summary: Write down which processes may message which, record a kernel trace, an
 categories: Developer Tools
 tags: beginner
 difficulty: 2
-status: draft
-authors: Blueprint contributors
+status: published
+authors: Dmytro Topka
 feedback_link: https://github.com/DmitriyTopka/qnx-blueprint/issues
 
 
@@ -60,6 +60,7 @@ Clone the repository and install it:
 ```console
 git clone https://github.com/DmitriyTopka/qnx-blueprint.git
 cd qnx-blueprint
+python3 -m venv .venv && . .venv/bin/activate
 python3 -m pip install .
 ```
 
@@ -78,7 +79,7 @@ gps, nav, camera, logger and display.
 |---|---|
 | `deadlock` | gps asks nav for a hint while nav waits on gps |
 | `backdoor` | display reads gps directly, bypassing nav |
-| `camera-hang` | the camera wedges and the display freezes with it |
+| `camera-hang` | the camera stops answering and the display freezes with it |
 | `slow-reply` | nav answers in 200 ms against a 50 ms budget |
 | `deadlock-late` | the deadlock happened before the trace started |
 | `prio-inversion` | logger keeps priority 10 on a fixed priority channel while display waits at 30 |
@@ -114,7 +115,7 @@ thread that received it.
 Negative
 : A send timeout would not have helped here. Channels created with
 `name_attach()` have `_NTO_CHF_UNBLOCK` set, so a REPLY-blocked client stays
-blocked until the server handles the unblock pulse, and a wedged server
+blocked until the server handles the unblock pulse, and a stuck server
 never does. The fixed display reads the camera from its own thread.
 
 ---
@@ -283,7 +284,7 @@ and add one step to your workflow:
 
 ```yaml
 - uses: actions/checkout@v7
-- uses: DmitriyTopka/qnx-blueprint@main
+- uses: DmitriyTopka/qnx-blueprint@v0.1.0
   with:
     trace: traces/nightly.kev
     contract: blueprint.yaml

@@ -19,17 +19,18 @@ No QNX target, SDP or API key needed. The repository ships traces recorded on
 QNX 8.0 (x86_64, QEMU) from the demo system in `demo/cockpit`.
 
 ```
+python3 -m venv .venv && . .venv/bin/activate      # or any Python 3.10+ environment
 python3 -m pip install .
 blueprint demo
 ```
 
 ```
-scenario            expected  got   checks                            story
-ok                  pass      pass  -                                 The system as designed.
-deadlock            fail      fail  unexpected-edge, wait-cycle       gps asks nav for a hint while nav is waiting on gps.
-backdoor            fail      fail  unexpected-edge                   display reads gps directly, bypassing nav.
-camera-hang         fail      fail  isolation                         The camera wedges; display has no protection and freezes.
-camera-hang-fixed   pass      pass  -                                 Same wedged camera, display reads it from its own thread.
+scenario              expected  got   checks                            story
+ok                    pass      pass  -                                 The system as designed.
+deadlock              fail      fail  unexpected-edge, wait-cycle       gps asks nav for a hint while nav is waiting on gps.
+backdoor              fail      fail  unexpected-edge                   display reads gps directly, bypassing nav.
+camera-hang           fail      fail  isolation                         The camera stops answering; display has no protection and freezes.
+camera-hang-fixed     pass      pass  -                                 Same stuck camera, display reads it from its own thread.
 ...
 ```
 
@@ -119,7 +120,7 @@ Recorded on QNX 8.0 in QEMU against the demo system:
 $ blueprint record root@localhost -c demo/cockpit/blueprint.yaml --inject camera@1.5 -d 4
 inject camera: killed 1 process(es)
 FAIL  [isolation] camera died and took display down with it
-      camera died; display died 57 ms later.
+      camera died; display died 38 ms later.
 FAIL: cockpit 1 error, 0 warnings
 ```
 
@@ -194,7 +195,7 @@ demo and CI runs work offline. One explanation costs about 0.06 USD with
 ## In CI
 
 ```yaml
-- uses: <owner>/qnx-blueprint@v1
+- uses: DmitriyTopka/qnx-blueprint@v0.1.0
   with:
     trace: traces/nightly.kev
     contract: blueprint.yaml
@@ -220,7 +221,7 @@ violation.
 | `demo/cockpit/cockpit.c` | `name_attach`, `name_open`, `MsgSend`, `MsgReceive`, `MsgReply`, pulses, `_NTO_CHF_UNBLOCK`, `_NTO_CHF_FIXED_PRIORITY`; gps as a resource manager (`resmgr_attach`, `iofunc_*`, `dispatch_*`) | a five-process system with realistic faults |
 
 One thing the demo shows that surprises people: a `TimerTimeout` on `MsgSend`
-does not protect a client from a wedged server. Channels created by
+does not protect a client from a server that stopped answering. Channels created by
 `name_attach()` have `_NTO_CHF_UNBLOCK` set, so a REPLY-blocked client that
 times out stays blocked until the server handles the unblock pulse. The fixed
 display reads the camera from its own thread instead.
@@ -233,6 +234,10 @@ display reads the camera from its own thread instead.
   checked as if it were complete. We detect the loss from gaps in the buffer
   sequence numbers; we could not make QEMU drop a buffer, so the check is
   tested on a real trace with one buffer cut out.
+- Size: a 2 MB trace (51,000 events) takes about 0.4 s and 70 MB of memory.
+  The parser keeps the whole trace in memory, so memory grows with the trace;
+  a trace of a few hundred megabytes would need several gigabytes (an
+  estimate, not measured). Record a few seconds around the behaviour you check.
 - Wide mode (`tracelogger -w`) is required: the fast mode drops the arguments
   that tie a message to its connection and channel.
 - The priority inversion check is experimental. A QNX server normally takes
