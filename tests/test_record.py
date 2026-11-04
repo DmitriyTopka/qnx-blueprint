@@ -42,8 +42,8 @@ class RemoteScript(unittest.TestCase):
             record.remote_script(2, [Injection("camera", 2)])
 
     def test_buffers(self):
-        self.assertIn("-n 64 ", record.remote_script(1, [], buffers=64))
-        self.assertNotIn(" -n ", record.remote_script(1, []))
+        self.assertIn("-k 64 ", record.remote_script(1, [], buffers=64))   # -n is iterations, not buffers
+        self.assertNotIn(" -k ", record.remote_script(1, []))
 
 
 class FakeTarget:

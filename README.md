@@ -72,6 +72,7 @@ priority_inversion_ms: 2    # experimental: time a waiting client may lose
 | `reply-budget` | a server replied, but slower than its budget |
 | `isolation` | a process died or stopped answering and took a protected process down with it |
 | `no-traffic` | the trace shows no answered message at all, so it proves nothing |
+| `trace-loss` | kernel buffers are missing from the trace (a gap in the per-CPU buffer sequence), so no verdict on it can be trusted |
 | `priority-inversion` | a client waits on a lower priority server while threads with a priority in between use the CPU (experimental, on when the contract sets `priority_inversion_ms`) |
 
 Every finding lists the trace events it is based on. Exit code 0 means pass,
@@ -210,6 +211,10 @@ display reads the camera from its own thread instead.
 
 - Times come from the trace clock. Under QEMU emulation they are inflated, so
   budgets in the demo are generous. Measure absolute latencies on hardware.
+- A trace that lost kernel buffers fails with `trace-loss` instead of being
+  checked as if it were complete. We detect the loss from gaps in the buffer
+  sequence numbers; we could not make QEMU drop a buffer, so the check is
+  tested on a real trace with one buffer cut out.
 - Wide mode (`tracelogger -w`) is required: the fast mode drops the arguments
   that tie a message to its connection and channel.
 - The priority inversion check is experimental. A QNX server normally takes

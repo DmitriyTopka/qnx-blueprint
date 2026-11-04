@@ -332,7 +332,7 @@ def main(argv: list[str] | None = None) -> int:
     p.add_argument("--contract", "-c", default="", help="check the trace against this contract when done")
     p.add_argument("--no-check", action="store_true", help="only record, even if --contract is given")
     p.add_argument("--ssh", default=record.SSH_DEFAULT, help=f"ssh command (default: {record.SSH_DEFAULT!r})")
-    p.add_argument("--buffers", type=int, default=0, help="tracelogger -n: number of trace buffers")
+    p.add_argument("--buffers", type=int, default=0, help="tracelogger -k: kernel trace buffers per CPU (raise it if a trace loses events)")
     p.add_argument("--json", default="", help="check: also write the report as JSON")
     p.add_argument("--perfetto", default="", help="check: also write a Perfetto trace")
     p.add_argument("--html", default="", help="check: also write an HTML report")

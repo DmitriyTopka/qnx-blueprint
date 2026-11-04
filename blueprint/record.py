@@ -68,7 +68,7 @@ def remote_script(duration: float, injections: list[Injection], start: str = "",
         "rm -rf $D; mkdir -p $D || exit 3",
         "command -v tracelogger >/dev/null || { echo 'no tracelogger on the target' >&2; exit 3; }",
         # -w: wide mode, the arguments that tie a message to its channel.
-        f"tracelogger -w -s {duration:g}{f' -n {buffers}' if buffers else ''} -f $D/run.kev >$D/tracelogger.log 2>&1 &",
+        f"tracelogger -w -s {duration:g}{f' -k {buffers}' if buffers else ''} -f $D/run.kev >$D/tracelogger.log 2>&1 &",
         "TL=$!",
         "sleep 0.3",
     ]

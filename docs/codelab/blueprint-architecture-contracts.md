@@ -165,7 +165,9 @@ pidin > /tmp/run.pidin
 ```
 
 Wide mode is required: it records the connection and channel of every
-message. The `pidin` snapshot matters when something was already stuck before
+message. If Blueprint reports `trace-loss`, the kernel buffers filled up
+before tracelogger could write them out; record again with more buffers
+(`-k 32`) or run tracelogger above the load (`on -p 40 tracelogger ...`). The `pidin` snapshot matters when something was already stuck before
 tracing began, because a thread that never changes state emits no events.
 
 Copy both files to the host:

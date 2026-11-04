@@ -147,3 +147,43 @@ class PriorityInversion(unittest.TestCase):
     def assertResult_none(self, scenario):
         _, errors, warnings = run(scenario)
         self.assertEqual((errors, warnings), ([], []), scenario)
+
+
+class TraceLoss(unittest.TestCase):
+    """A trace with a kernel buffer cut out, the way a dropped buffer looks."""
+
+    @staticmethod
+    def without_one_buffer(name, cpu=1, seq=10):
+        path = os.path.join(HERE, "..", "demo", "cockpit", "traces", name + ".kev")
+        with open(path, "rb") as f:
+            data = f.read()
+        trace = kev.read(path)
+        starts = {(e.cpu, e.words[0]): e.index for e in trace.events
+                  if e.cls == kev.CLASS_CONTROL and e.code == kev.CONTROL_BUFFER}
+        lo, hi = starts[(cpu, seq)], starts[(cpu, seq + 1)]
+        # Event slots are 16 bytes and run to the end of the file.
+        slot = 16
+        base = len(data) - (max(e.index for e in trace.events) + 1) * slot
+        cut = data[:base + lo * slot] + data[base + hi * slot:]
+        out = os.path.join(HERE, "data", "_lossy.kev")
+        with open(out, "wb") as f:
+            f.write(cut)
+        return out
+
+    def test_recorded_traces_are_complete(self):
+        for name in ["ok", "deadlock", "prio-inversion", "camera-hang-late"]:
+            trace = kev.read(os.path.join(HERE, "..", "demo", "cockpit", "traces", name + ".kev"))
+            self.assertEqual(kev.lost_buffers(trace), [], name)
+
+    def test_a_missing_buffer_fails_the_check(self):
+        path = self.without_one_buffer("ok")
+        try:
+            trace = kev.read(path)
+            self.assertEqual([(c, a, b) for c, a, b, _t, _i in kev.lost_buffers(trace)], [(1, 9, 11)])
+            findings, _ = checks.run(trace, CONTRACT)
+            loss = [f for f in findings if f.check == "trace-loss"]
+            self.assertEqual(len(loss), 1)
+            self.assertEqual(loss[0].severity, checks.ERROR)
+            self.assertEqual(loss[0].data["missing_buffers"], 1)
+        finally:
+            os.remove(path)

@@ -10,6 +10,7 @@ Checks:
   reply-budget     a server answered, but slower than its budget
   isolation        a process failed (died or stopped answering) and took
                    another one down with it
+  trace-loss       the trace is missing kernel buffers, so no verdict on it can be trusted
   priority-inversion  (experimental, opt-in) a client waited on a lower priority
                    server while threads in between used the CPU
 """
@@ -64,6 +65,7 @@ def run(trace: kev.Trace, contract: contract_mod.Contract,
     t_end = trace.events[-1].t_cycles if trace.events else 0
     ctx = Context(trace, model, contract, topo, t_end)
     findings: List[Finding] = []
+    findings += check_trace_loss(ctx)
     findings += check_unexpected_edges(ctx)
     cycles, cycle_findings = check_wait_cycles(ctx)
     findings += cycle_findings
@@ -73,6 +75,35 @@ def run(trace: kev.Trace, contract: contract_mod.Contract,
     findings += check_priority_inversion(ctx)
     findings += check_traffic(ctx, findings)
     return findings, topo
+
+
+def check_trace_loss(ctx: Context) -> List[Finding]:
+    """Fails a trace that lost kernel buffers.
+
+    A lost reply looks like a stuck server, a lost send hides an edge, so
+    neither a pass nor the other findings can be trusted. The other checks
+    still run, but the build fails with this reason first.
+    """
+    gaps = kev.lost_buffers(ctx.trace)
+    if not gaps:
+        return []
+    t0 = ctx.trace.events[0].t_cycles if ctx.trace.events else 0
+    missing = sum(b - a - 1 for _cpu, a, b, _t, _i in gaps if b > a)
+    cpus = sorted({cpu for cpu, *_ in gaps})
+    where = "; ".join(f"CPU {cpu}: buffer {a} then {b}, after {ctx.ms(t - t0) / 1000:.2f} s"
+                      for cpu, a, b, t, _i in gaps[:4])
+    return [Finding(
+        "trace-loss", ERROR,
+        f"the trace lost {missing or len(gaps)} kernel buffer(s) on CPU {', '.join(map(str, cpus))}",
+        f"The buffer sequence jumps ({where}). Events in those buffers never reached the file: "
+        f"a missing reply looks like a stuck server and a missing send hides an edge, so "
+        f"neither a pass nor the other findings on this trace can be trusted. Record again "
+        f"with more kernel buffers (tracelogger -k), a shorter run, or tracelogger at a "
+        f"higher priority than the load (on -p).",
+        [], [i for *_rest, i in gaps[:5]],
+        {"gaps": [{"cpu": cpu, "after": a, "next": b} for cpu, a, b, _t, _i in gaps],
+         "missing_buffers": missing},
+    )]
 
 
 def check_unexpected_edges(ctx: Context) -> List[Finding]:

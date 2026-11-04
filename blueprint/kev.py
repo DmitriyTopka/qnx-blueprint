@@ -17,7 +17,7 @@ from __future__ import annotations
 
 import struct
 from dataclasses import dataclass, field
-from typing import Dict, Iterator, List, Optional
+from typing import Dict, Iterator, List, Optional, Tuple
 
 HEADER_END = b"TRACE_HEADER_END::"
 
@@ -179,3 +179,25 @@ def ker_call(ev: RawEvent) -> Optional[tuple[int, bool, bool]]:
     if ev.cls != CLASS_KER_CALL:
         return None
     return ev.code & 0x7F, bool(ev.code & KER_EXIT_BIT), bool(ev.code & KER_WIDE_BIT)
+
+
+def lost_buffers(trace: "Trace") -> List[Tuple[int, int, int, int, int]]:
+    """Gaps in the per-CPU buffer sequence: (cpu, last seen, next seen,
+    time of the last buffer before the gap, event index of the first after).
+
+    Every kernel buffer starts with a CONTROL BUFFER event whose first word is
+    a sequence number that counts up by one per CPU. A jump means buffers that
+    never reached the file, and the events in them are missing.
+    """
+    last: Dict[int, Tuple[int, int]] = {}
+    gaps = []
+    for ev in trace.events:
+        if ev.cls != CLASS_CONTROL or ev.code != CONTROL_BUFFER or not ev.words:
+            continue
+        seq = ev.words[0]
+        prev = last.get(ev.cpu)
+        if prev is not None and seq != prev[0] + 1:
+            gaps.append((ev.cpu, prev[0], seq, prev[1], ev.index))
+        last[ev.cpu] = (seq, ev.t_cycles)
+    return gaps
+
