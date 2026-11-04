@@ -38,7 +38,9 @@ at [ui.perfetto.dev](https://ui.perfetto.dev) to see every message as an arrow
 between threads.
 
 A step-by-step tutorial in the QNX codelab format is in
-[docs/codelab](docs/codelab/blueprint-architecture-contracts.md).
+[docs/codelab](docs/codelab/blueprint-architecture-contracts.md), and answers
+to the usual questions (overhead, false alarms, what Claude sees, what is not
+covered) are in [docs/FAQ.md](docs/FAQ.md).
 
 ## The contract
 
@@ -171,7 +173,7 @@ a time: it gets the trace events behind it (each with an id), the contract and
 the source you pass, and returns the cause, the QNX call at fault and a patch.
 Event ids it did not receive are removed, and an explanation left with no real
 evidence is marked unverified. Answers are cached next to the contract, so the
-demo and CI runs work offline. One explanation costs about 0.04 USD with
+demo and CI runs work offline. One explanation costs about 0.06 USD with
 `claude-opus-5-5`.
 
 ## In CI

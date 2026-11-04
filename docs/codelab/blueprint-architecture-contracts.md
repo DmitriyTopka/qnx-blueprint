@@ -230,7 +230,7 @@ python3 -m pip install anthropic
 blueprint check run.kev -c blueprint.yaml --explain --source src/ui.c --source src/fusion.c --html report.html
 ```
 
-One explanation costs about 0.04 USD. Answers are cached next to the
+One explanation costs about 0.06 USD. Answers are cached next to the
 contract, so the same finding is never paid for twice.
 
 ---
