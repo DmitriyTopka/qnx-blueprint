@@ -123,8 +123,8 @@ def cmd_check(args: argparse.Namespace) -> int:
     if snap is not None:
         print(f"(thread states from {snap_path})")
     verdict = "FAIL" if errors else "PASS"
-    print(f"{verdict}: {con.system or 'system'} {len(errors)} errors, "
-          f"{len(findings) - len(errors)} warnings ({args.trace})")
+    print(f"{verdict}: {con.system or 'system'} "
+          f"{checks.counts(len(errors), len(findings) - len(errors))} ({args.trace})")
     return 1 if errors else 0
 
 
@@ -162,8 +162,8 @@ def cmd_secpol(args: argparse.Namespace) -> int:
     for f in findings:
         print(f"{'FAIL' if f.severity == checks.ERROR else 'warn'}  [{f.check}] {f.title}")
         print(f"      {f.detail}")
-    print(f"{'FAIL' if errors else 'PASS'}: {args.check} {len(errors)} errors, "
-          f"{len(findings) - len(errors)} warnings against {args.contract}")
+    print(f"{'FAIL' if errors else 'PASS'}: {args.check} "
+          f"{checks.counts(len(errors), len(findings) - len(errors))} against {args.contract}")
     return 1 if errors else 0
 
 
@@ -215,7 +215,7 @@ def _markdown(result: dict, explanations: dict) -> str:
     """Short summary for a CI page (GitHub step summary)."""
     verdict = "PASS" if result["result"] == "pass" else "FAIL"
     lines = [f"### Blueprint: {_md(result['system'] or 'system')} {verdict}", "",
-             f"{result['summary']['errors']} errors, {result['summary']['warnings']} warnings "
+             f"{checks.counts(result['summary']['errors'], result['summary']['warnings'])} "
              f"in {_md(result['trace'])}", ""]
     if result["findings"]:
         lines += ["| | Check | Finding |", "|---|---|---|"]

@@ -104,7 +104,7 @@ $ blueprint record root@localhost -c demo/cockpit/blueprint.yaml --inject camera
 inject camera: killed 1 process(es)
 FAIL  [isolation] camera died and took display down with it
       camera died; display died 57 ms later.
-FAIL: cockpit 1 errors, 0 warnings
+FAIL: cockpit 1 error, 0 warnings
 ```
 
 The same command against the fixed display passes.

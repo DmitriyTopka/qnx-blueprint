@@ -28,6 +28,12 @@ ERROR = "error"
 WARNING = "warning"
 
 
+def counts(errors: int, warnings: int) -> str:
+    """'1 error, 2 warnings'."""
+    return (f"{errors} error{'' if errors == 1 else 's'}, "
+            f"{warnings} warning{'' if warnings == 1 else 's'}")
+
+
 @dataclass
 class Finding:
     check: str

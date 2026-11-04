@@ -54,5 +54,22 @@ class HtmlReport(unittest.TestCase):
         self.assertIn("The trace matches the contract.", page)
 
 
+class ReportLayout(unittest.TestCase):
+    def test_cause_first_with_evidence_and_highlighted_path(self):
+        trace, model, findings, topo = load("prio-inversion")
+        page = report.render(trace, model, CONTRACT, findings, topo, "prio-inversion.kev")
+        summary = page[page.index("<ol class=summary>"):page.index("</ol>")]
+        self.assertIn("start here", summary)
+        self.assertLess(summary.index("priority-inversion"), summary.index("reply-budget"))
+        self.assertIn("Show the", page)                     # evidence table per finding
+        self.assertIn("_NTO_CHF_FIXED_PRIORITY", page)      # the channel flags note
+        self.assertIn("class='edge warn'", page)            # display -> logger in the graph
+        self.assertIn("5 errors, 0 warnings", page)
+
+    def test_singular_counts(self):
+        self.assertEqual(checks.counts(1, 1), "1 error, 1 warning")
+        self.assertEqual(checks.counts(0, 2), "0 errors, 2 warnings")
+
+
 if __name__ == "__main__":
     unittest.main()
