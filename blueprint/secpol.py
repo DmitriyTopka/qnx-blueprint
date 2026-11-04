@@ -15,7 +15,10 @@ Two directions:
 The policy language is described in the QNX OS System Security Guide,
 "Security policy language". Only the statements that decide channel
 connections are interpreted here: type, attribute, `allow ... :channel connect`
-and the `channel_connect` ability. Everything else is kept but ignored.
+and the `channel_connect` ability. Other known statements (allow_attach,
+derive_type, ...) are skipped. The parser fails closed: an allow rule or a
+statement it cannot read is an error, never silently dropped, because a
+dropped rule could hide a connection and turn into a false pass.
 """
 
 from __future__ import annotations
@@ -97,14 +100,29 @@ _SET = r"(\{[^}]*\}|[A-Za-z0-9_]+)"
 # allow SUBJECTS OBJECTS:CLASSES PERMISSIONS   (after spaces around ':' and ',' are removed)
 _ALLOW = re.compile(rf"^allow\s+{_SET}\s+{_SET}:{_SET}\s+(\{{.*\}}|\S+)$", re.S)
 _TYPE_NAME = re.compile(r"^[A-Za-z0-9_]+$")
+# An ability, optionally with a range: spawn, network/bind/privport, mem_phys:0x1000-0x2000,
+# channel_connect:a_t,b_t. Anything else (*, ~, stray punctuation) is not understood.
+_ABILITY_TOKEN = re.compile(r"^[A-Za-z0-9_/]+(:[A-Za-z0-9_,\-]+)?$")
 ALL_TYPES = "*"
+# Statement keywords of the policy language that do not decide channel connections.
+OTHER_STATEMENTS = {"allow_attach", "allow_link", "derive_type", "default_spawn_type", "range",
+                    "ability", "class", "mount_point", "gain_priv"}
 
 
-def _names(token: str) -> List[str]:
+def _names(token: str, commas: bool = True) -> List[str]:
+    """Members of a `{ ... }` set (or the single name). Type and class sets may
+    use commas or spaces; ability blocks keep commas, they belong to ranges."""
     token = token.strip()
     if token.startswith("{"):
-        return token[1:-1].split()
-    return [token]
+        token = token[1:-1]
+    return [t for t in re.split(r"[\s,]+" if commas else r"\s+", token) if t]
+
+
+def _plain(number: int, names: List[str], what: str) -> List[str]:
+    for n in names:
+        if not _TYPE_NAME.match(n):
+            raise PolicyError(f"line {number}: cannot read {what} {n!r}")
+    return names
 
 
 def _statements(text: str) -> Iterable[Tuple[int, str]]:
@@ -131,7 +149,9 @@ def _connect_targets(number: int, permissions: str) -> List[str]:
     """Types an ability block lets the subject connect to (ALL_TYPES for a
     bare channel_connect without a range)."""
     targets: List[str] = []
-    for item in _names(permissions):
+    for item in _names(permissions, commas=False):
+        if not _ABILITY_TOKEN.match(item):
+            raise PolicyError(f"line {number}: cannot read ability {item!r}")
         if item == "channel_connect":
             targets.append(ALL_TYPES)
         elif item.startswith("channel_connect:"):
@@ -165,13 +185,14 @@ def parse(text: str) -> Policy:
             flat = re.sub(r"\s*([:,])\s*", r"\1", stmt)
             m = _ALLOW.match(flat)
             if m is None:
-                if "channel" in stmt:
-                    raise PolicyError(f"line {number}: cannot read this rule: {stmt[:120]}")
-                continue
-            subjects, objects = _names(m.group(1)), _names(m.group(2))
-            classes, permissions = _names(m.group(3)), m.group(4)
-            if "channel" in classes and "connect" in _names(permissions):
-                pending.append((number, subjects, objects))
+                raise PolicyError(f"line {number}: cannot read this rule: {stmt[:120]}")
+            subjects = _plain(number, _names(m.group(1)), "type")
+            objects = _plain(number, _names(m.group(2)), "type")
+            classes, permissions = _plain(number, _names(m.group(3)), "class"), m.group(4)
+            if "channel" in classes:
+                perms = _plain(number, _names(permissions), "channel permission")
+                if "connect" in perms:
+                    pending.append((number, subjects, objects))
             if "ability" in classes:
                 # An ability always belongs to the subject, whatever the object.
                 targets = _connect_targets(number, permissions)
@@ -179,6 +200,8 @@ def parse(text: str) -> Policy:
                     pending.append((number, subjects, targets))
             elif "channel_connect" in permissions:
                 raise PolicyError(f"line {number}: channel_connect outside an ability rule: {stmt[:120]}")
+        elif word not in OTHER_STATEMENTS:
+            raise PolicyError(f"line {number}: unknown statement: {stmt[:120]}")
     with_rules = {s for _n, subjects, _o in pending for s in subjects}
     for number, subjects, objects in pending:
         for s in _expand(pol, subjects, with_rules):

@@ -124,6 +124,19 @@ class FailClosed(unittest.TestCase):
             with self.assertRaises(secpol.PolicyError, msg=rule):
                 secpol.parse("type display_t; type gps_t;\n" + rule)
 
+    def test_commas_in_type_sets(self):
+        text = "type a_t; type b_t; type c_t;\nallow { a_t, b_t } { c_t , a_t }:channel connect;"
+        self.assertEqual(secpol.parse(text).connect,
+                         {("a_t", "c_t"), ("a_t", "a_t"), ("b_t", "c_t"), ("b_t", "a_t")})
+
+    def test_wildcards_and_complements_are_errors(self):
+        for rule in ["allow display_t gps_t:channel *;", "allow display_t gps_t:channel ~connect;",
+                     "allow display_t * :channel connect;", "allow display_t self:ability { * };",
+                     "allow display_t self:ability { ~channel_connect:gps_t };",
+                     "allow { display_t; gps_t }:channel connect;"]:
+            with self.assertRaises(secpol.PolicyError, msg=rule):
+                secpol.parse("type display_t; type gps_t;\n" + rule)
+
     def test_other_rules_are_still_ignored(self):
         pol = secpol.parse("type a_t; allow a_t self:ability { nonroot spawn mem_phys:0x1000-0x2000 };\n"
                            "allow_attach a_t /dev/x; derive_type a_t run b_t;")
