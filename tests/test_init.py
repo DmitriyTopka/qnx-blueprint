@@ -106,5 +106,25 @@ class HostileNames(unittest.TestCase):
             init_contract.select(ipc.build(trace), ["nav", "gps\nx"])
 
 
+class AwkwardNames(unittest.TestCase):
+    def test_trailing_newline_yaml_words_and_reserved(self):
+        self.assertEqual(init_contract._q("gps"), "gps")
+        for name in ["gps\n", "true", "null", "1.5", "No", ".inf"]:
+            self.assertTrue(init_contract._q(name).startswith('"'), name)
+        trace = kev.read(os.path.join(TRACES, "ok.kev"))
+        model = ipc.build(trace)
+        pid = next(p for p, n in model.names.items() if n == "logger")
+        model.names[pid] = "default"
+        processes, left_out = init_contract.select(model, None)
+        self.assertNotIn("default", processes)
+        self.assertIn("default", left_out)
+        with self.assertRaises(ValueError):
+            init_contract.select(model, ["nav", "default"])
+
+    def test_contract_arrow_is_one_line(self):
+        with self.assertRaises(contract.ContractError):
+            contract.parse({"processes": ["a", "b"], "allow": ["a -> b\n"]})
+
+
 if __name__ == "__main__":
     unittest.main()

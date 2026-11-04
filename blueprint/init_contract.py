@@ -24,9 +24,13 @@ SYSTEM = re.compile(
     r"on|sleep|cat|ls|secpol.*|smmuman|acpi.*|pid\d+)$")
 
 
-_PLAIN = re.compile(r"^[A-Za-z0-9_.+-]+$")
+_PLAIN = re.compile(r"[A-Za-z][A-Za-z0-9_.-]*")
 # What the contract accepts as a process name (contract.ARROW uses [\w.-]).
-_NAME = re.compile(r"^[\w.-]+$")
+_NAME = re.compile(r"[\w.-]+")
+# Plain words that YAML reads as something other than a string.
+_YAML_WORDS = {"true", "false", "yes", "no", "on", "off", "y", "n", "null", "none", "nan", "inf"}
+# "default" is a key of reply_budget_ms, not a process.
+RESERVED = {"default"}
 
 
 def _q(text: str) -> str:
@@ -34,7 +38,8 @@ def _q(text: str) -> str:
     written by the system being checked, so anything beyond a plain name is
     quoted (a JSON string is a valid YAML double-quoted scalar) and cannot
     add keys or list items to the contract."""
-    return text if _PLAIN.match(text) else json.dumps(text)
+    plain = _PLAIN.fullmatch(text) and text.lower().lstrip(".") not in _YAML_WORDS
+    return text if plain else json.dumps(text)
 
 
 def _nice(ms: float) -> float:
@@ -57,13 +62,14 @@ def select(model: ipc.IpcModel, only: Optional[Sequence[str]] = None) -> Tuple[L
         talking.add(model.name(tx.client_pid))
         talking.add(model.name(tx.server_pid))
     if only:
-        bad = [p for p in only if not _NAME.match(p)]
+        bad = [p for p in only if not _NAME.fullmatch(p) or p in RESERVED]
         if bad:
             raise ValueError(f"{bad[0]!r} cannot be a process name in a contract")
         return [p for p in only], sorted(talking - set(only))
     # A name the contract cannot express is left out (and reported) rather
     # than written into the draft.
-    candidates = {p for p in talking if not SYSTEM.match(p) and _NAME.match(p)}
+    candidates = {p for p in talking
+                  if not SYSTEM.fullmatch(p) and _NAME.fullmatch(p) and p not in RESERVED}
     # Keep only processes that exchange messages with another candidate.
     linked = set()
     for tx in model.transactions:

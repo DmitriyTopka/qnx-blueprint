@@ -30,7 +30,7 @@ from typing import Dict, List, Optional, Set, Tuple
 
 import yaml
 
-ARROW = re.compile(r"^\s*([\w.-]+)\s*->\s*([\w.-]+)\s*$")
+ARROW = re.compile(r"[ \t]*([\w.-]+)[ \t]*->[ \t]*([\w.-]+)[ \t]*")
 TOP_KEYS = {"system", "processes", "allow", "reply_budget_ms", "isolation", "priority_inversion_ms"}
 ISOLATION_KEYS = {"must_survive", "min_progress"}
 
@@ -84,7 +84,7 @@ def parse(doc: dict) -> Contract:
 
     allow: Set[Tuple[str, str]] = set()
     for item in doc.get("allow") or []:
-        m = ARROW.match(str(item))
+        m = ARROW.fullmatch(str(item))
         if not m:
             raise ContractError(f"allow: expected 'client -> server', got {item!r}")
         client, server = m.groups()
