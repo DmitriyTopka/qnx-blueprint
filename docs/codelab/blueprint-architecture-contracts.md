@@ -152,6 +152,12 @@ isolation:
 Blueprint rejects a contract with unknown keys or names that are not in
 `processes`, so typos fail loudly.
 
+Positive
+: If the system already runs, you don't have to start from a blank file.
+`blueprint init run.kev -o blueprint.yaml` drafts one from a recorded trace:
+the processes, every edge it saw and budgets with headroom. Then delete what
+you did not design.
+
 ---
 
 ## Record a trace on your target

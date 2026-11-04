@@ -9,7 +9,7 @@ import sys
 
 import os
 
-from . import checks, contract, explain, ipc, kev, perfetto, record, report, secpol, snapshot, topology
+from . import checks, contract, explain, init_contract, ipc, kev, perfetto, record, report, secpol, snapshot, topology
 
 
 def cmd_pairs(args: argparse.Namespace) -> int:
@@ -126,6 +126,40 @@ def cmd_check(args: argparse.Namespace) -> int:
     print(f"{verdict}: {con.system or 'system'} "
           f"{checks.counts(len(errors), len(findings) - len(errors))} ({args.trace})")
     return 1 if errors else 0
+
+
+def cmd_init(args: argparse.Namespace) -> int:
+    try:
+        trace = kev.read(args.trace)
+    except (OSError, kev.KevFormatError) as e:
+        print(f"blueprint: {e}", file=sys.stderr)
+        return 2
+    model = ipc.build(trace)
+    only = [p for p in args.only.split(",") if p] if args.only else None
+    processes, left_out = init_contract.select(model, only)
+    if not processes:
+        print("blueprint: no two application processes exchange messages in this trace; "
+              "name them with --only", file=sys.stderr)
+        return 2
+    text = init_contract.draft(trace, model, processes, os.path.basename(args.trace), args.system)
+    try:
+        contract.parse(__import__("yaml").safe_load(text))     # the draft must be a valid contract
+    except contract.ContractError as e:
+        print(f"blueprint: internal error, the draft is not a valid contract: {e}", file=sys.stderr)
+        return 2
+    if args.out:
+        if os.path.exists(args.out) and not args.force:
+            print(f"blueprint: {args.out} exists; pass --force to overwrite it", file=sys.stderr)
+            return 2
+        with open(args.out, "w", encoding="utf-8") as f:
+            f.write(text)
+        print(f"wrote {args.out}", file=sys.stderr)
+    else:
+        sys.stdout.write(text)
+    if left_out:
+        print(f"left out (system services or no messages with the others): {', '.join(left_out)}",
+              file=sys.stderr)
+    return 0
 
 
 def _types(args: argparse.Namespace) -> dict:
@@ -315,6 +349,14 @@ def build_parser() -> argparse.ArgumentParser:
     p.add_argument("--type", action="append", default=[], metavar="PROCESS=TYPE",
                    help="security type of a process if not <process>_t (repeatable)")
     p.set_defaults(func=cmd_check)
+    p = sub.add_parser("init", help="draft a contract from a recorded trace")
+    p.add_argument("trace", help="path to a .kev file from tracelogger -w")
+    p.add_argument("--only", default="", help="comma-separated processes to put in the contract "
+                   "(default: application processes that message each other)")
+    p.add_argument("--system", default="my-system", help="system name for the contract")
+    p.add_argument("--out", "-o", default="", help="write the draft here instead of stdout")
+    p.add_argument("--force", action="store_true", help="overwrite --out if it exists")
+    p.set_defaults(func=cmd_init)
     p = sub.add_parser("secpol", help="write QNX security policy channel rules from the contract, "
                        "or compare a policy with it")
     p.add_argument("--contract", "-c", default="blueprint.yaml", help="contract file")

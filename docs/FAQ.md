@@ -85,10 +85,11 @@ collected, sshd refused our key login in `--secpol=secure` mode.
 
 ## How do I write a contract for a system that already exists?
 
-Record a trace and run `blueprint topology run.kev`. It lists every
-process-to-process edge it saw, with message counts. Copy the ones you
-intended into `allow:` and leave out the ones you didn't. That decision is
-the useful part, and it stays with you.
+Record a trace and run `blueprint init run.kev -o blueprint.yaml`. It writes a
+draft with the application processes, every edge the trace showed and its
+message count, and reply budgets at four times the slowest reply seen. Delete
+the edges you did not design. That decision is the useful part, and it stays
+with you: a draft taken from a trace with a backdoor contains the backdoor.
 
 ## How do I use it in CI?
 

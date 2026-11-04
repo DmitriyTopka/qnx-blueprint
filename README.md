@@ -64,6 +64,20 @@ priority_inversion_ms: 2    # experimental: time a waiting client may lose
                             # to lower priority work
 ```
 
+To start from a system that already runs, record a trace and let Blueprint
+write the first draft:
+
+```
+blueprint init run.kev --system cockpit -o blueprint.yaml
+```
+
+It lists the application processes that message each other (QNX services
+such as procnto, devb-* and io-sock are left out, `--only` picks them by
+hand), every edge it saw with its message count, and reply budgets at four
+times the slowest reply in that trace. A draft taken from a trace with a
+backdoor contains the backdoor, so read it and delete what you did not
+design.
+
 ## Checks
 
 | Check | Fails when |
