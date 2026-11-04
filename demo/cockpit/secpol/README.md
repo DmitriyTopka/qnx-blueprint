@@ -7,6 +7,7 @@
 | `learned-backdoor.secpol` | the same, after one more run of the backdoor build |
 | `backdoor.secpol` | written by hand to test attributes, sets and the `channel_connect` ability |
 | `secure-aarch64.secpol` | learned on QNX 8.0 aarch64 (QEMU virt) over a longer session, plus one hand-written `trace` ability; boots in `--secpol=secure` with ssh working |
+| `secure-x86_64.secpol` | the same on x86_64, plus `setgid:0` and `setuid:0` for `sshd_t` (see below) |
 
 All of them compile with `secpolcompile` from QNX SDP 8.0.
 
@@ -53,11 +54,20 @@ mode, with no secpolgenerate and every process held to the policy. It was
 learned on the aarch64 image in one session that did what the secure system
 has to do: three ssh key logins, scp both ways, the cockpit with each role
 as its type (plain and with gps as a resource manager), pidin, slay, on.
-A shorter session on x86_64 left out part of the ssh login, and sshd refused
-the key in secure mode. tracelogger cannot be learned (see above), so one
-rule was added by hand: `allow user_root_t self:ability { trace };`.
+tracelogger cannot be learned (see above), so one rule was added by hand:
+`allow user_root_t self:ability { trace };`.
 
-What the kernel does with the cockpit there, recorded and checked:
+On x86_64 the same session gave a policy that worked in develop mode with
+every type restricted (secpolgenerate logged no denials), yet in secure mode
+sshd dropped the connection after the client offered its key. A second sshd
+started with `-d` on another port showed why: `initgroups: root: Operation
+not permitted`. Granting `setgid:0` and `setuid:0` to `sshd_t` fixed it. Why
+aarch64 does not need the rule we don't know; the two images differ only in
+architecture.
+
+Both secure images run the healthy cockpit, and on both the backdoor fails in
+the kernel with "Operation not permitted". What the kernel does with the
+cockpit on aarch64, recorded and checked:
 
 | Build | Kernel | Blueprint |
 |---|---|---|

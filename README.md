@@ -170,8 +170,8 @@ FAIL  [secpol] policy lets display connect to gps, which the contract forbids
 ```
 
 `blueprint check run.kev --secpol learned.secpol` runs the same comparison
-next to the trace checks. On QNX 8.0 aarch64 booted in fully secure mode with
-a policy that matches the contract, the backdoor build fails in the kernel:
+next to the trace checks. On QNX 8.0 (x86_64 and aarch64) booted in fully
+secure mode with a policy that matches the contract, the backdoor build fails in the kernel:
 `cockpit: cannot open cockpit-gps: Operation not permitted`, and so does
 `open()` on the gps resource manager. How the demo
 policies were made is in [demo/cockpit/secpol](demo/cockpit/secpol/README.md).
