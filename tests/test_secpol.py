@@ -137,6 +137,15 @@ class FailClosed(unittest.TestCase):
             with self.assertRaises(secpol.PolicyError, msg=rule):
                 secpol.parse("type display_t; type gps_t;\n" + rule)
 
+    def test_ability_keyword_inside_a_range_is_an_error(self):
+        for body in ["channel_connect:gps_t, channel_connect", "channel_connect:gps_t,spawn"]:
+            with self.assertRaises(secpol.PolicyError, msg=body):
+                secpol.parse("type display_t; type gps_t;\nallow display_t self:ability { %s };" % body)
+
+    def test_undeclared_types_are_errors(self):
+        with self.assertRaises(secpol.PolicyError):
+            secpol.parse("type a_t; allow a_t ghost_t:channel connect;")
+
     def test_other_rules_are_still_ignored(self):
         pol = secpol.parse("type a_t; allow a_t self:ability { nonroot spawn mem_phys:0x1000-0x2000 };\n"
                            "allow_attach a_t /dev/x; derive_type a_t run b_t;")

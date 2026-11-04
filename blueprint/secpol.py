@@ -203,7 +203,13 @@ def parse(text: str) -> Policy:
         elif word not in OTHER_STATEMENTS:
             raise PolicyError(f"line {number}: unknown statement: {stmt[:120]}")
     with_rules = {s for _n, subjects, _o in pending for s in subjects}
+    known = pol.types | set(pol.attributes) | {"self", "default_rules", ALL_TYPES}
     for number, subjects, objects in pending:
+        # secpolcompile rejects undeclared names too; here it also catches an
+        # ability keyword swallowed into a range ("channel_connect:a_t,channel_connect").
+        for name in subjects + objects:
+            if name not in known:
+                raise PolicyError(f"line {number}: {name!r} is not a declared type or attribute")
         for s in _expand(pol, subjects, with_rules):
             if objects == ["self"]:
                 targets = [s]
