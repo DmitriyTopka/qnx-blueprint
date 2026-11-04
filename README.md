@@ -74,14 +74,43 @@ isolation:                  # when camera dies or hangs, display keeps working
 Every finding lists the trace events it is based on. Exit code 0 means pass,
 1 means the contract is violated, 2 means bad input.
 
-## Record a trace on your target
+## Record on your target, with faults
+
+If the target runs sshd, one command records and checks:
+
+```
+blueprint record root@192.168.1.20 -c blueprint.yaml --inject camera@1.5 -d 5 \
+    -o run.kev --html report.html
+```
+
+This starts a wide trace on the running system, kills `camera` with SIGKILL
+1.5 seconds in, saves `pidin` when the trace stops, copies `run.kev` and
+`run.pidin` back and checks them against the contract. Nothing is installed on
+the target: it only needs `tracelogger`, `pidin`, `slay` and `sleep` from a
+stock QNX 8.0 image. `--inject` takes any process from the contract and can be
+repeated. `--start "..."` launches the system inside the trace instead of
+attaching to one that is already up, and `--ssh "..."` replaces the ssh command
+(for a jump host or a VM in a container). A kill that finds no such process is
+reported, so a test that never broke anything cannot pass by accident.
+
+Recorded on QNX 8.0 in QEMU against the demo system:
+
+```
+$ blueprint record root@localhost -c demo/cockpit/blueprint.yaml --inject camera@1.5 -d 4
+inject camera: killed 1 process(es)
+FAIL  [isolation] camera died and took display down with it
+      camera died; display died 57 ms later.
+FAIL: cockpit 1 errors, 0 warnings
+```
+
+The same command against the fixed display passes.
+
+Without ssh, record by hand and copy the files:
 
 ```
 tracelogger -w -s 5 -f /tmp/run.kev      # wide mode is required
 pidin > /tmp/run.pidin                   # thread states when the trace stopped
 ```
-
-Copy both files to the host and run:
 
 ```
 blueprint check run.kev --contract blueprint.yaml --html report.html --perfetto run.perfetto.json
@@ -127,6 +156,7 @@ violation.
 | `blueprint/ipc.py` | `MsgSendv`, `MsgSendvnc`, `MsgReceivev`, `MsgReplyv`, `MsgError` kernel calls; COMM `SND_MESSAGE`, `REPLY_MESSAGE`; `ConnectAttach`, `ChannelCreate` | rebuilds every message transaction with client, server, channel and timing |
 | `blueprint/ipc.py` | thread states `SEND`, `RECEIVE`, `REPLY` | knows who is blocked on whom when the trace ends |
 | `blueprint/snapshot.py` | `pidin` blocked-on column | sees waits that started before the trace |
+| `blueprint/record.py` | `tracelogger -w`, `slay -s KILL`, `pidin` on the target over ssh | kills a process while the trace runs, so its death and the reaction of its clients are both in the trace |
 | `blueprint/checks.py` | synchronous message passing semantics | deadlock, stuck server, reply budget, isolation |
 | `demo/cockpit/cockpit.c` | `name_attach`, `name_open`, `MsgSend`, `MsgReceive`, `MsgReply`, pulses, `_NTO_CHF_UNBLOCK` | a five-process system with realistic faults |
 

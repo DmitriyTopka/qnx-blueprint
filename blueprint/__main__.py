@@ -4,11 +4,12 @@ from __future__ import annotations
 
 import argparse
 import json
+import subprocess
 import sys
 
 import os
 
-from . import checks, contract, explain, ipc, kev, perfetto, report, snapshot, topology
+from . import checks, contract, explain, ipc, kev, perfetto, record, report, snapshot, topology
 
 
 def cmd_pairs(args: argparse.Namespace) -> int:
@@ -120,6 +121,38 @@ def cmd_check(args: argparse.Namespace) -> int:
     return 1 if errors else 0
 
 
+def cmd_record(args: argparse.Namespace) -> int:
+    try:
+        injections = [record.Injection.parse(t) for t in args.inject]
+        con = contract.load(args.contract) if args.contract else None
+    except (record.RecordError, OSError, contract.ContractError) as e:
+        print(f"blueprint: {e}", file=sys.stderr)
+        return 2
+    if con is not None:
+        unknown = [i.process for i in injections if i.process not in con.processes]
+        if unknown:
+            print(f"blueprint: --inject {unknown[0]} is not a process in {args.contract}", file=sys.stderr)
+            return 2
+    try:
+        result = record.record(args.host, args.out, args.duration, injections,
+                               start=args.start, ssh=args.ssh, buffers=args.buffers)
+    except (record.RecordError, subprocess.TimeoutExpired) as e:
+        print(f"blueprint: {e}", file=sys.stderr)
+        return 2
+    record.print_log(result)
+    trace = kev.read(result["trace"])
+    model = ipc.build(trace)
+    for w in record.check_injections(result, [model.name(pid) for pid in model.deaths]):
+        print(f"warning: {w}", file=sys.stderr)
+    print(f"wrote {result['trace']}, {result['snapshot']} ({len(trace.events)} events)")
+    if con is None or args.no_check:
+        return 0
+    check_args = argparse.Namespace(
+        trace=result["trace"], contract=args.contract, json=args.json, perfetto=args.perfetto,
+        html=args.html, markdown="", snapshot="", explain=False, source=[], offline=False, cache="")
+    return cmd_check(check_args)
+
+
 def _md(text: str) -> str:
     """Make text from a trace or a model safe for a Markdown table or paragraph.
 
@@ -227,6 +260,23 @@ def main(argv: list[str] | None = None) -> int:
     p.add_argument("--offline", action="store_true", help="only use cached explanations, never call the API")
     p.add_argument("--cache", default="", help="explanation cache directory (default: next to the contract)")
     p.set_defaults(func=cmd_check)
+    p = sub.add_parser("record", help="record a trace on a running QNX target over ssh, "
+                       "optionally killing processes, then check it")
+    p.add_argument("host", help="ssh destination, e.g. root@192.168.1.20")
+    p.add_argument("--out", "-o", default="run.kev", help="local trace file (.pidin and .inject.json go next to it)")
+    p.add_argument("--duration", "-d", type=float, default=5.0, help="trace length in seconds (default 5)")
+    p.add_argument("--inject", action="append", default=[], metavar="NAME@SECONDS",
+                   help="kill this process with SIGKILL this many seconds into the trace (repeatable)")
+    p.add_argument("--start", default="", help="shell command that starts the system inside the trace "
+                   "(default: attach to the system already running)")
+    p.add_argument("--contract", "-c", default="", help="check the trace against this contract when done")
+    p.add_argument("--no-check", action="store_true", help="only record, even if --contract is given")
+    p.add_argument("--ssh", default=record.SSH_DEFAULT, help=f"ssh command (default: {record.SSH_DEFAULT!r})")
+    p.add_argument("--buffers", type=int, default=0, help="tracelogger -n: number of trace buffers")
+    p.add_argument("--json", default="", help="check: also write the report as JSON")
+    p.add_argument("--perfetto", default="", help="check: also write a Perfetto trace")
+    p.add_argument("--html", default="", help="check: also write an HTML report")
+    p.set_defaults(func=cmd_record)
     p = sub.add_parser("demo", help="replay the recorded cockpit scenarios (no QNX target needed)")
     p.add_argument("--scenarios", default=os.path.join("demo", "cockpit", "scenarios.yaml"))
     p.add_argument("--out", default="out")

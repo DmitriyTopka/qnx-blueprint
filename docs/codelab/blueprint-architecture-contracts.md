@@ -25,7 +25,7 @@ In this codelab you will:
 1. replay a recorded five-process system and see Blueprint catch a deadlock,
    a hung camera and a slow server;
 2. write an architecture contract for your own system;
-3. record a kernel trace on a QNX 8.0 target and check it;
+3. record a kernel trace on a QNX 8.0 target, kill a process on purpose and check what happened;
 4. add the check to GitHub Actions.
 
 No hardware is needed. Steps 1 and 2 run on any Mac, Linux or Windows host
@@ -178,6 +178,32 @@ Positive
 `/usr/libexec/sshd-auth does not exist` on the console. Add
 `[perms=555] /usr/libexec/sshd-auth=usr/libexec/sshd-auth` to
 `local/snippets/ifs_files.custom` and rebuild.
+
+---
+
+## Break it on purpose
+Duration: 4:00
+
+A contract that says `camera` may die is only worth something if you kill the
+camera and watch. With sshd on the target, Blueprint does that in one step:
+
+```console
+blueprint record root@localhost -c blueprint.yaml --inject sensor@1.5 -d 5 -o run.kev --html report.html
+```
+
+It starts the trace on the running system, sends SIGKILL to `sensor` 1.5
+seconds in, saves `pidin` at the end, copies both files back and checks them.
+You should see `inject sensor: killed 1 process(es)` and then either PASS, or
+an `isolation` error that names the process `sensor` took down with it.
+
+Negative
+: `slay` exits with the number of processes it signalled, not 0 for success.
+If you script kills yourself, `slay name && echo killed` prints nothing when the
+kill worked. Blueprint reads the count, and reports a kill that found no
+process instead of letting the test pass.
+
+If your target is a QEMU VM inside a container, pass the ssh command with
+`--ssh`, for example `--ssh "docker exec -i qnx-qemu ssh -p 2222"`.
 
 ---
 
