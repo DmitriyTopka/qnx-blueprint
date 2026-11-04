@@ -11,6 +11,8 @@ Checks:
   isolation        a process failed (died or stopped answering) and took
                    another one down with it
   trace-loss       the trace is missing kernel buffers, so no verdict on it can be trusted
+  trace-mode       the trace was recorded without -w (a warning; an error if the
+                   contract asks for the priority inversion check)
   priority-inversion  (experimental, opt-in) a client waited on a lower priority
                    server while threads in between used the CPU
 """
@@ -72,6 +74,7 @@ def run(trace: kev.Trace, contract: contract_mod.Contract,
     ctx = Context(trace, model, contract, topo, t_end)
     findings: List[Finding] = []
     findings += check_trace_loss(ctx)
+    findings += check_trace_mode(ctx)
     findings += check_unexpected_edges(ctx)
     cycles, cycle_findings = check_wait_cycles(ctx)
     findings += cycle_findings
@@ -110,6 +113,33 @@ def check_trace_loss(ctx: Context) -> List[Finding]:
         {"gaps": [{"cpu": cpu, "after": a, "next": b} for cpu, a, b, _t, _i in gaps],
          "missing_buffers": missing},
     )]
+
+
+def check_trace_mode(ctx: Context) -> List[Finding]:
+    """A trace recorded without tracelogger -w.
+
+    Without wide mode thread state events carry no priority and messages no
+    payload. Edges, replies and blocking still come through, but the priority
+    inversion check would see nothing, so it must not quietly pass.
+    """
+    if ctx.model.sched or not ctx.model.states:
+        return []
+    args = ctx.trace.attributes.get("TRACELOGGER_ARGS", "")
+    how = f" ({args})" if args else ""
+    if ctx.contract.priority_inversion_ms is not None:
+        return [Finding(
+            "trace-mode", ERROR,
+            "the trace was not recorded in wide mode, so priority inversion cannot be checked",
+            f"The contract sets priority_inversion_ms, but this trace{how} has no thread "
+            f"priorities: tracelogger records them only with -w. Record again with "
+            f"tracelogger -w.", [], [], {"tracelogger": args})]
+    return [Finding(
+        "trace-mode", WARNING,
+        "the trace was not recorded in wide mode",
+        f"This trace{how} has no thread priorities or message contents, which tracelogger "
+        f"records only with -w. Edges, replies and blocking are checked as usual; "
+        f"explanations get less evidence. Record with tracelogger -w for the full picture.",
+        [], [], {"tracelogger": args})]
 
 
 def check_unexpected_edges(ctx: Context) -> List[Finding]:

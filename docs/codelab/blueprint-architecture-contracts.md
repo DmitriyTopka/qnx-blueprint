@@ -172,8 +172,9 @@ tracelogger -w -s 5 -f /tmp/run.kev
 pidin > /tmp/run.pidin
 ```
 
-Wide mode is required: it records the connection and channel of every
-message. If Blueprint reports `trace-loss`, the kernel buffers filled up
+Use wide mode (`-w`): it adds thread priorities and the first bytes of each
+message. Without it Blueprint still finds the edges, but warns that the trace
+is not wide and refuses the priority inversion check. If Blueprint reports `trace-loss`, the kernel buffers filled up
 before tracelogger could write them out; record again with more buffers
 (`-k 32`) or run tracelogger above the load (`on -p 40 tracelogger ...`). The `pidin` snapshot matters when something was already stuck before
 tracing began, because a thread that never changes state emits no events.

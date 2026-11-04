@@ -27,9 +27,10 @@ without a change to Blueprint. Four of those traces are test fixtures in
 ## What does tracing cost the system?
 
 We have not measured the overhead on hardware. On our QEMU target a
-four-second wide trace of the demo is about 1.3 MB. Wide mode
-(`tracelogger -w`) is required, because only wide events carry the
-connection, channel and priority data the checks need.
+four-second wide trace of the demo is about 1.3 MB. Record with
+`tracelogger -w`: without it the edges and blocking still come through, but
+thread priorities and message contents do not, and Blueprint says so
+(`trace-mode`) instead of quietly skipping the checks that need them.
 
 ## How does it avoid false alarms?
 

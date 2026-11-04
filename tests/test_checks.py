@@ -207,3 +207,32 @@ class ResourceManager(unittest.TestCase):
         findings, errors, _ = run("resmgr-backdoor")
         self.assertEqual(errors, ["unexpected-edge"])
         self.assertEqual(findings[0].processes, ["display", "gps"])
+
+
+class FastModeTrace(unittest.TestCase):
+    """The healthy cockpit recorded with plain tracelogger, without -w, on QNX 8.0."""
+
+    PATH = os.path.join(HERE, "data", "cockpit_fast_ok.kev")
+
+    def test_edges_still_come_through(self):
+        from blueprint import ipc, topology
+        model = ipc.build(kev.read(self.PATH))
+        topo = topology.build(model, CONTRACT.processes)
+        self.assertEqual(set(topo.edges), CONTRACT.allow)
+        self.assertEqual(model.sched, [])          # no priorities without -w
+
+    def test_warning_without_the_inversion_check(self):
+        con = contract.parse({"processes": CONTRACT.processes,
+                              "allow": [f"{a} -> {b}" for a, b in sorted(CONTRACT.allow)]})
+        findings, _ = checks.run(kev.read(self.PATH), con)
+        self.assertEqual([(f.check, f.severity) for f in findings], [("trace-mode", checks.WARNING)])
+
+    def test_error_when_the_contract_asks_for_it(self):
+        findings, _ = checks.run(kev.read(self.PATH), CONTRACT)
+        mode = [f for f in findings if f.check == "trace-mode"]
+        self.assertEqual(mode[0].severity, checks.ERROR)
+
+    def test_wide_traces_are_not_flagged(self):
+        for name in ["ok", "deadlock", "camera-hang-late"]:
+            findings, _ = checks.run(kev.read(os.path.join(HERE, "..", "demo", "cockpit", "traces", name + ".kev")), CONTRACT)
+            self.assertNotIn("trace-mode", [f.check for f in findings], name)

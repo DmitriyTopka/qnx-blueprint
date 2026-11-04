@@ -136,7 +136,7 @@ The same command against the fixed display passes.
 Without ssh, record by hand and copy the files:
 
 ```
-tracelogger -w -s 5 -f /tmp/run.kev      # wide mode is required
+tracelogger -w -s 5 -f /tmp/run.kev      # -w: wide mode, see Limits
 pidin > /tmp/run.pidin                   # thread states when the trace stopped
 ```
 
@@ -245,8 +245,11 @@ display reads the camera from its own thread instead.
   The parser keeps the whole trace in memory, so memory grows with the trace;
   a trace of a few hundred megabytes would need several gigabytes (an
   estimate, not measured). Record a few seconds around the behaviour you check.
-- Wide mode (`tracelogger -w`) is required: the fast mode drops the arguments
-  that tie a message to its connection and channel.
+- Record with `tracelogger -w`. Without wide mode the trace still shows who
+  sent to whom and who was blocked (on the healthy demo it gave the same five
+  edges), but thread priorities and message contents are missing. Blueprint
+  then warns (`trace-mode`), and fails if the contract asks for the priority
+  inversion check, rather than skip that check quietly.
 - The priority inversion check is experimental. A QNX server normally takes
   its client's priority while it handles the message, so the check does not
   look for "server priority lower than client". It looks at what the kernel
