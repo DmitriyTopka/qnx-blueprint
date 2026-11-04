@@ -1,14 +1,21 @@
 # Blueprint
 
-Architecture contracts for QNX 8.0 systems, checked against the kernel trace.
+One contract, two enforcers: Blueprint checks a QNX 8.0 system against its
+message architecture in CI, and turns the same file into a security policy
+the kernel enforces.
 
 A QNX system is a set of processes that talk through synchronous messages. The
 design usually lives in someone's head or on a whiteboard: display asks nav,
 nav asks gps, nobody calls back up the chain, and a dead camera must not take
 the screen with it. Blueprint lets you write that design down in a few lines of
-YAML and checks a real trace against it. When the system does something the
-design does not allow, the build fails and the report says which process did
-what, with the trace events to prove it.
+YAML, the contract.
+
+- **Before release** it checks a real kernel trace against the contract. When
+  the system does something the design does not allow, the build fails and
+  the report says which process did what, with the trace events to prove it.
+- **After release** the same file becomes the channel rules of a QNX security
+  policy. Booted in secure mode, the kernel refuses a connection the contract
+  does not allow: `cockpit: cannot open cockpit-gps: Operation not permitted`.
 
 System Profiler shows you a trace. Blueprint knows what the trace should look
 like and tells you where it does not.
