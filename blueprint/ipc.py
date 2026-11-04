@@ -62,6 +62,7 @@ PROC_DESTROY_NAME = 4 << 6
 THREAD_NAME = 5 << 6
 
 SIDE_CHANNEL = 0x40000000
+CHF_FIXED_PRIORITY = 0x0001    # _NTO_CHF_FIXED_PRIORITY in <sys/neutrino.h>
 
 
 @dataclass
@@ -118,6 +119,9 @@ class IpcModel:
     deaths: Dict[int, int] = field(default_factory=dict)       # pid -> time it was destroyed
     # Every thread state change in trace order: (time, pid, tid, state).
     states: List[Tuple[int, int, int, int]] = field(default_factory=list)
+    # The same changes with scheduling data, when the event carries it (wide
+    # mode): (time, cpu, pid, tid, state, priority, event index).
+    sched: List[Tuple[int, int, int, int, int, int, int]] = field(default_factory=list)
     thread_names: Dict[Tuple[int, int], str] = field(default_factory=dict)
     death_events: Dict[int, int] = field(default_factory=dict)  # pid -> event index
 
@@ -135,6 +139,7 @@ def build(trace: kev.Trace) -> IpcModel:
     in_send: Dict[Tuple[int, int], Transaction] = {}    # client thread -> open send
     waiting: Dict[Tuple[int, int], Transaction] = {}    # (server pid, rcvid) -> sent, not received
     by_rcvid: Dict[Tuple[int, int], Transaction] = {}   # (server pid, rcvid) -> received, not replied
+    create_flags: Dict[Tuple[int, int], int] = {}       # caller -> ChannelCreate flags
 
     for ev in trace.events:
         w = ev.words
@@ -157,6 +162,8 @@ def build(trace: kev.Trace) -> IpcModel:
                 pid, tid = w[0], w[1]
                 model.thread_state[(pid, tid)] = code
                 model.states.append((ev.t_cycles, pid, tid, code))
+                if len(w) >= 3:
+                    model.sched.append((ev.t_cycles, ev.cpu, pid, tid, code, w[2], ev.index))
                 if code == STATE_RUNNING:
                     running[ev.cpu] = (pid, tid)
             continue
@@ -194,9 +201,13 @@ def build(trace: kev.Trace) -> IpcModel:
             continue
         pid, tid = caller
 
-        if number == KER_CHANNEL_CREATE and is_exit and w:
+        if number == KER_CHANNEL_CREATE and not is_exit and w:
+            create_flags[caller] = w[0]
+
+        elif number == KER_CHANNEL_CREATE and is_exit and w:
             chid = w[0]
-            model.channels[(pid, chid)] = Channel(pid, chid, ev.t_cycles)
+            model.channels[(pid, chid)] = Channel(pid, chid, ev.t_cycles,
+                                                  create_flags.pop(caller, 0))
 
         elif number == KER_CONNECT_ATTACH and not is_exit and len(w) >= 3:
             # nd, pid, chid, index, flags; pid 0 means "this process".

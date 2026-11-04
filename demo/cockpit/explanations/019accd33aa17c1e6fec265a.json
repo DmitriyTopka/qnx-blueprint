@@ -1,0 +1,34 @@
+{
+  "raw": {
+    "cause": "The display was built with COCKPIT_FAULT=backdoor, so run_display() calls name_open(\"cockpit-gps\") and then, every tick, issues MsgSend(MSG_POSITION) straight to gps in addition to asking nav for a route. gps answers promptly (each send is received and replied within a few ms), so this is not a hang. It is a layering violation: display bypasses nav, and the contract only allows nav -> gps.",
+    "evidence_event_ids": [
+      57138,
+      57148,
+      57158,
+      83889,
+      83899,
+      83920,
+      93046,
+      93056,
+      93066
+    ],
+    "qnx_call": "MsgSend in display to gps (coid 0x40000004, obtained via name_open(\"cockpit-gps\"))",
+    "fix_summary": "Remove the direct gps connection from display. Position data should reach display only through nav's route reply, which already embeds the gps position. If display really needs raw positions, add a nav message type that returns them, or add 'display -> gps' to blueprint.yaml as a deliberate contract change. Do not leave the backdoor in place.",
+    "fix_patch": "--- a/cockpit.c\n+++ b/cockpit.c\n@@ static int run_display(int ticks) {\n     int nav = connect_to(\"cockpit-nav\");\n     int camera = connect_to(\"cockpit-camera\");\n     int logger = connect_to(\"cockpit-logger\");\n-    int gps = has_fault(\"backdoor\") ? connect_to(\"cockpit-gps\") : -1;\n@@\n     for (int seq = 0; seq < ticks; seq++) {\n-        cockpit_msg_t route, frame, pos;\n+        cockpit_msg_t route, frame;\n         ask(nav, MSG_ROUTE, seq, \"route?\", &route);\n-        if (gps != -1) {\n-            ask(gps, MSG_POSITION, seq, \"where? (direct)\", &pos);\n-        }\n",
+    "doc_refs": [
+      "name_open",
+      "MsgSend",
+      "name_attach",
+      "Synchronous message passing"
+    ],
+    "confidence": "high"
+  },
+  "usage": {
+    "model": "claude-opus-5-5",
+    "input_tokens": 8274,
+    "output_tokens": 704,
+    "cache_read_input_tokens": 1260,
+    "cache_creation_input_tokens": 0
+  },
+  "finding": "display talks to gps, which the contract does not allow"
+}

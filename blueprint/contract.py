@@ -15,6 +15,8 @@ A contract is a small YAML file, for example:
       camera:
         must_survive: [display, nav]   # ... these keep working
         min_progress: 3                 # completed messages after the fault
+    priority_inversion_ms: 2    # experimental: a waiting client may lose at most
+                                # this much time to lower priority work
 
 Only the processes listed under `processes` are checked; messages to system
 servers (procnto, pipe, devb-*) are outside the contract.
@@ -24,12 +26,12 @@ from __future__ import annotations
 
 import re
 from dataclasses import dataclass, field
-from typing import Dict, List, Set, Tuple
+from typing import Dict, List, Optional, Set, Tuple
 
 import yaml
 
 ARROW = re.compile(r"^\s*([\w.-]+)\s*->\s*([\w.-]+)\s*$")
-TOP_KEYS = {"system", "processes", "allow", "reply_budget_ms", "isolation"}
+TOP_KEYS = {"system", "processes", "allow", "reply_budget_ms", "isolation", "priority_inversion_ms"}
 ISOLATION_KEYS = {"must_survive", "min_progress"}
 
 
@@ -52,6 +54,7 @@ class Contract:
     reply_budget_ms: Dict[str, float] = field(default_factory=dict)
     isolation: Dict[str, Isolation] = field(default_factory=dict)
     source: str = ""
+    priority_inversion_ms: Optional[float] = None   # None: check is off
 
     def budget_for(self, server: str) -> float | None:
         if server in self.reply_budget_ms:
@@ -113,4 +116,13 @@ def parse(doc: dict) -> Contract:
                 raise ContractError(f"isolation.{name}.must_survive: {s} is not listed under processes")
         isolation[name] = Isolation(name, list(survivors), int(rule.get("min_progress", 3)))
 
-    return Contract(str(doc.get("system", "")), list(processes), allow, budgets, isolation)
+    inversion = doc.get("priority_inversion_ms")
+    if inversion is not None:
+        try:
+            inversion = float(inversion)
+        except (TypeError, ValueError):
+            raise ContractError("priority_inversion_ms: expected a number") from None
+        if inversion < 0:
+            raise ContractError("priority_inversion_ms: must not be negative")
+    return Contract(str(doc.get("system", "")), list(processes), allow, budgets, isolation,
+                    priority_inversion_ms=inversion)

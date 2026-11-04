@@ -24,10 +24,16 @@
  *   camera-hang camera stops replying; display has no timeout and freezes
  *   camera-dies display treats a camera error as fatal and exits with it
  *   slow-reply  nav takes 200 ms to answer
+ *   prio-inversion logger serves a channel created with
+ *               _NTO_CHF_FIXED_PRIORITY, so it keeps its own low priority
+ *               while display (priority 30) waits on it; run it next to
+ *               media, a priority 20 job that keeps both CPUs busy
  *
  * COCKPIT_FIXED=1 turns on the fix for the camera faults: display reads the
  * camera from its own thread and degrades to "camera stale" instead of
  * blocking (see camera_reader below for why a send timeout is not enough).
+ * For prio-inversion it drops _NTO_CHF_FIXED_PRIORITY from the logger channel,
+ * so logger inherits the priority of whoever is waiting on it.
  */
 
 #include <errno.h>
@@ -41,6 +47,7 @@
 #include <sys/dispatch.h>
 #include <sys/iomsg.h>
 #include <sys/neutrino.h>
+#include <sys/syspage.h>
 
 #define MSG_POSITION 0x1001
 #define MSG_ROUTE    0x1002
@@ -65,8 +72,36 @@ static void sleep_ms(long ms) {
     nanosleep(&ts, NULL);
 }
 
+#define LOGGER_CHAN "/tmp/cockpit-logger.chan"
+
+/* The logger channel for prio-inversion is made with ChannelCreate() so it can
+ * carry _NTO_CHF_FIXED_PRIORITY (name_attach() takes no channel flags). Its
+ * pid and chid are published in a file. */
+static int connect_logger_channel(void) {
+    for (int i = 0; i < 200; i++) {
+        FILE *f = fopen(LOGGER_CHAN, "r");
+        int pid, chid;
+        if (f != NULL) {
+            int n = fscanf(f, "%d %d", &pid, &chid);
+            fclose(f);
+            if (n == 2) {
+                int coid = ConnectAttach(0, pid, chid, _NTO_SIDE_CHANNEL, 0);
+                if (coid != -1) {
+                    return coid;
+                }
+            }
+        }
+        usleep(20000);
+    }
+    fprintf(stderr, "cockpit: cannot connect to the logger channel: %s\n", strerror(errno));
+    exit(2);
+}
+
 /* Connect to a named server, waiting for it to appear. */
 static int connect_to(const char *name) {
+    if (strcmp(name, "cockpit-logger") == 0 && strcmp(fault, "prio-inversion") == 0) {
+        return connect_logger_channel();
+    }
     for (int i = 0; i < 200; i++) {
         int coid = name_open(name, 0);
         if (coid != -1) {
@@ -93,20 +128,15 @@ static void log_line(int logger, int seq, const char *text) {
 
 typedef int (*handler_t)(int rcvid, cockpit_msg_t *msg, cockpit_msg_t *reply);
 
-/* Generic server loop: handles connects and pulses, passes our messages on. */
-static void serve(const char *name, handler_t handle) {
-    name_attach_t *att = name_attach(NULL, name, 0);
-    if (att == NULL) {
-        fprintf(stderr, "cockpit: name_attach %s: %s\n", name, strerror(errno));
-        exit(2);
-    }
+/* Server loop on a channel: handles connects and pulses, passes our messages on. */
+static void serve_channel(int chid, handler_t handle) {
     for (;;) {
         union {
             struct _pulse pulse;
             struct _io_connect connect;
             cockpit_msg_t msg;
         } in;
-        int rcvid = MsgReceive(att->chid, &in, sizeof(in), NULL);
+        int rcvid = MsgReceive(chid, &in, sizeof(in), NULL);
         if (rcvid == -1) {
             continue;
         }
@@ -128,6 +158,23 @@ static void serve(const char *name, handler_t handle) {
         if (handle(rcvid, &in.msg, &reply) == 0) {
             MsgReply(rcvid, EOK, &reply, sizeof(reply));
         }
+    }
+}
+
+static void serve(const char *name, handler_t handle) {
+    name_attach_t *att = name_attach(NULL, name, 0);
+    if (att == NULL) {
+        fprintf(stderr, "cockpit: name_attach %s: %s\n", name, strerror(errno));
+        exit(2);
+    }
+    serve_channel(att->chid, handle);
+}
+
+/* Burn CPU for about ms milliseconds without sleeping. */
+static void busy_ms(long ms) {
+    uint64_t cps = SYSPAGE_ENTRY(qtime)->cycles_per_sec;
+    uint64_t end = ClockCycles() + cps / 1000 * (uint64_t)ms;
+    while (ClockCycles() < end) {
     }
 }
 
@@ -194,7 +241,58 @@ static int camera_handle(int rcvid, cockpit_msg_t *msg, cockpit_msg_t *reply) {
 static int logger_handle(int rcvid, cockpit_msg_t *msg, cockpit_msg_t *reply) {
     (void)rcvid;
     (void)msg;
+    if (has_fault("prio-inversion")) {
+        busy_ms(2);            /* formats the line and flushes it */
+    }
     snprintf(reply->text, sizeof(reply->text), "ok");
+    return 0;
+}
+
+static void run_logger(void) {
+    if (!has_fault("prio-inversion")) {
+        serve("cockpit-logger", logger_handle);
+    }
+    /* The regression: someone made the logger fixed priority so that logging
+     * never competes with real work. Clients still wait for its reply. */
+    unsigned flags = _NTO_CHF_DISCONNECT | _NTO_CHF_COID_DISCONNECT | _NTO_CHF_UNBLOCK;
+    if (!fixed) {
+        flags |= _NTO_CHF_FIXED_PRIORITY;
+    }
+    int chid = ChannelCreate(flags);
+    if (chid == -1) {
+        fprintf(stderr, "cockpit: ChannelCreate: %s\n", strerror(errno));
+        exit(2);
+    }
+    FILE *f = fopen(LOGGER_CHAN, "w");
+    if (f == NULL) {
+        exit(2);
+    }
+    fprintf(f, "%d %d\n", getpid(), chid);
+    fclose(f);
+    serve_channel(chid, logger_handle);
+}
+
+/* ---- media -------------------------------------------------------------- */
+
+/* A background job at priority 20: higher than the servers, lower than the
+ * display. It keeps every CPU busy 45 ms out of 50. */
+static void *media_worker(void *arg) {
+    (void)arg;
+    pthread_setschedprio(pthread_self(), 20);
+    for (;;) {
+        busy_ms(45);
+        sleep_ms(5);
+    }
+    return NULL;
+}
+
+static int run_media(void) {
+    int cpus = _syspage_ptr->num_cpu;
+    pthread_t t;
+    for (int i = 1; i < cpus; i++) {
+        pthread_create(&t, NULL, media_worker, NULL);
+    }
+    media_worker(NULL);
     return 0;
 }
 
@@ -230,6 +328,9 @@ static void *camera_reader(void *arg) {
 }
 
 static int run_display(int ticks) {
+    if (has_fault("prio-inversion")) {
+        pthread_setschedprio(pthread_self(), 30);
+    }
     int nav = connect_to("cockpit-nav");
     int camera = connect_to("cockpit-camera");
     int logger = connect_to("cockpit-logger");
@@ -271,7 +372,7 @@ int main(int argc, char **argv) {
     int arg = 1;
     if (strcmp(role, "cockpit") == 0) {
         if (argc < 2) {
-            fprintf(stderr, "usage: cockpit gps|nav|camera|logger|display [ticks]\n");
+            fprintf(stderr, "usage: cockpit gps|nav|camera|logger|media|display [ticks]\n");
             return 2;
         }
         role = argv[1];
@@ -291,7 +392,9 @@ int main(int argc, char **argv) {
     } else if (strcmp(role, "camera") == 0) {
         serve("cockpit-camera", camera_handle);
     } else if (strcmp(role, "logger") == 0) {
-        serve("cockpit-logger", logger_handle);
+        run_logger();
+    } else if (strcmp(role, "media") == 0) {
+        return run_media();
     } else if (strcmp(role, "display") == 0) {
         return run_display(argc > arg ? atoi(argv[arg]) : 20);
     }

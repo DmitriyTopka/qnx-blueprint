@@ -1,7 +1,7 @@
 #!/bin/sh
 # Runs one cockpit scenario on the target under a wide kernel trace.
 #   cockpit-run.sh <scenario> [fixed]
-# Scenarios: ok deadlock backdoor camera-hang camera-dies slow-reply
+# Scenarios: ok deadlock backdoor camera-hang camera-dies slow-reply prio-inversion
 # LATE=1 starts the trace after the system is up (no ChannelCreate/ConnectAttach in it).
 # Writes /tmp/<scenario>[-fixed].kev, .pidin and .out
 SC=${1:-ok}
@@ -14,7 +14,14 @@ export COCKPIT_FAULT=$SC
 TRACE=/tmp/$NAME.kev
 OUT=/tmp/$NAME.out
 
-slay -Q -s KILL display gps nav camera logger >/dev/null 2>&1
+slay -Q -s KILL display gps nav camera logger media >/dev/null 2>&1
+rm -f /tmp/cockpit-logger.chan
+# media keeps both CPUs busy at priority 20; tracelogger runs above it so the
+# trace buffers still get written.
+TLPRIO=
+if [ "$SC" = prio-inversion ]; then
+    TLPRIO="on -p 40"
+fi
 
 if [ -n "$LATE" ]; then
     # Start the trace on a system that is already running, the way it is in
@@ -30,11 +37,15 @@ if [ -n "$LATE" ]; then
     TL=$!
 else
     # Start the trace first so every ChannelCreate and ConnectAttach is recorded.
-    tracelogger -w -s 6 -f $TRACE >/dev/null 2>&1 &
+    $TLPRIO tracelogger -w -s 6 -f $TRACE >/dev/null 2>&1 &
     TL=$!
     sleep 1
     logger & gps & camera & nav &
     sleep 1
+    if [ "$SC" = prio-inversion ]; then
+        media &
+        sleep 0.5
+    fi
     display 50 >$OUT 2>&1 &
 fi
 if [ "$SC" = camera-dies ]; then
@@ -45,5 +56,5 @@ wait $TL
 # Thread states at the end of the trace, for threads that were blocked all along.
 pidin >${TRACE%.kev}.pidin 2>&1
 echo "exit: $(pidin -p display -f a 2>/dev/null | tail -n +2 | grep -q . && echo still-running || echo finished)" >>$OUT
-slay -Q -s KILL display gps nav camera logger >/dev/null 2>&1
+slay -Q -s KILL display gps nav camera logger media >/dev/null 2>&1
 ls -l $TRACE

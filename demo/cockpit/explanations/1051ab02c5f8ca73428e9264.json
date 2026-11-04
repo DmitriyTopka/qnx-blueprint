@@ -1,0 +1,36 @@
+{
+  "raw": {
+    "cause": "nav's reply time is normally about 2.3 ms, but two calls took 51.6 ms (101163\u2192101365) and 50.4 ms (111825\u2192112583), and one more took 49.7 ms (109791\u2192110914). The slow-reply fault (200 ms) is not active, so this is jitter. While display stays REPLY-blocked, nav_handle makes two nested synchronous calls, MsgSend to gps and then MsgSend to logger, so any stall in either server or under QEMU scheduling adds to display's wait. The trace has no gps or logger events, so which one stalled cannot be shown; the 50 ms budget also leaves no headroom under emulation, which the contract itself warns about.",
+    "evidence_event_ids": [
+      101163,
+      101173,
+      101365,
+      111825,
+      111835,
+      112583,
+      109791,
+      109801,
+      110914,
+      101644,
+      101741
+    ],
+    "qnx_call": "MsgReply in nav, delayed by nav's nested MsgSend to gps and logger inside nav_handle",
+    "fix_summary": "Take the logger round-trip off display's critical path: in nav_handle, call MsgReply to display as soon as the route is built, then log, and return nonzero so serve_channel does not reply twice. That leaves only the gps call inside the wait. Because the outliers sit right at the limit and timings are inflated under QEMU, also raise reply_budget_ms.nav (for example to 100) in blueprint.yaml; that part is a contract change, not a code bug. If outliers remain, trace gps to see whether it is the source.",
+    "fix_patch": "--- a/cockpit.c\n+++ b/cockpit.c\n@@ static int nav_handle(int rcvid, cockpit_msg_t *msg, cockpit_msg_t *reply) {\n-    (void)rcvid;\n     if (msg->type == MSG_HINT) {\n@@\n     snprintf(reply->text, sizeof(reply->text), \"route via %.36s\", pos.text);\n-    log_line(nav_logger, msg->seq, \"route sent\");\n-    return 0;\n+    /* Unblock display first; logging must not count against its wait. */\n+    MsgReply(rcvid, EOK, reply, sizeof(*reply));\n+    log_line(nav_logger, msg->seq, \"route sent\");\n+    return 1; /* already replied */\n }\n--- a/blueprint.yaml\n+++ b/blueprint.yaml\n@@\n reply_budget_ms:\n-  nav: 50\n+  nav: 100\n   default: 20",
+    "doc_refs": [
+      "MsgReply",
+      "MsgSend",
+      "MsgReceive",
+      "Synchronous message passing"
+    ],
+    "confidence": "medium"
+  },
+  "usage": {
+    "model": "claude-opus-5-5",
+    "input_tokens": 8403,
+    "output_tokens": 1375,
+    "cache_read_input_tokens": 1260,
+    "cache_creation_input_tokens": 0
+  },
+  "finding": "nav answers display too slowly"
+}

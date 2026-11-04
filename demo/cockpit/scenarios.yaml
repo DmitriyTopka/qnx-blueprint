@@ -43,3 +43,10 @@ scenarios:
     story: The camera wedged before the trace started.
     expect: fail
     checks: [isolation]
+  - name: prio-inversion
+    story: logger is fixed priority 10, display waits on it at 30 while media runs at 20.
+    expect: fail
+    checks: [priority-inversion, reply-budget]
+  - name: prio-inversion-fixed
+    story: Same load, logger channel without _NTO_CHF_FIXED_PRIORITY inherits 30.
+    expect: pass

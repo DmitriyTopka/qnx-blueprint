@@ -58,6 +58,8 @@ isolation:                  # when camera dies or hangs, display keeps working
   camera:
     must_survive: [display]
     min_progress: 3
+priority_inversion_ms: 2    # experimental: time a waiting client may lose
+                            # to lower priority work
 ```
 
 ## Checks
@@ -70,6 +72,7 @@ isolation:                  # when camera dies or hangs, display keeps working
 | `reply-budget` | a server replied, but slower than its budget |
 | `isolation` | a process died or stopped answering and took a protected process down with it |
 | `no-traffic` | the trace shows no answered message at all, so it proves nothing |
+| `priority-inversion` | a client waits on a lower priority server while threads with a priority in between use the CPU (experimental, on when the contract sets `priority_inversion_ms`) |
 
 Every finding lists the trace events it is based on. Exit code 0 means pass,
 1 means the contract is violated, 2 means bad input.
@@ -155,6 +158,7 @@ violation.
 | `blueprint/kev.py` | kernel trace file format, instrumented kernel `procnto-smp-instr` | reads `tracelogger` output on any host, no SDP needed |
 | `blueprint/ipc.py` | `MsgSendv`, `MsgSendvnc`, `MsgReceivev`, `MsgReplyv`, `MsgError` kernel calls; COMM `SND_MESSAGE`, `REPLY_MESSAGE`; `ConnectAttach`, `ChannelCreate` | rebuilds every message transaction with client, server, channel and timing |
 | `blueprint/ipc.py` | thread states `SEND`, `RECEIVE`, `REPLY` | knows who is blocked on whom when the trace ends |
+| `blueprint/checks.py` | thread state events with priority, `_NTO_CHF_FIXED_PRIORITY` from `ChannelCreate` | priority inversion: who ran while a waiting client's server sat READY |
 | `blueprint/snapshot.py` | `pidin` blocked-on column | sees waits that started before the trace |
 | `blueprint/record.py` | `tracelogger -w`, `slay -s KILL`, `pidin` on the target over ssh | kills a process while the trace runs, so its death and the reaction of its clients are both in the trace |
 | `blueprint/checks.py` | synchronous message passing semantics | deadlock, stuck server, reply budget, isolation |
@@ -172,8 +176,13 @@ display reads the camera from its own thread instead.
   budgets in the demo are generous. Measure absolute latencies on hardware.
 - Wide mode (`tracelogger -w`) is required: the fast mode drops the arguments
   that tie a message to its connection and channel.
-- Priority inversion is not reported: a QNX server inherits its client's
-  priority, so a naive detector would mostly report false positives.
+- The priority inversion check is experimental. A QNX server normally takes
+  its client's priority while it handles the message, so the check does not
+  look for "server priority lower than client". It looks at what the kernel
+  actually scheduled: the server READY at a lower priority while threads
+  between the two priorities run. On a normal channel that should not happen;
+  it shows up with `_NTO_CHF_FIXED_PRIORITY` channels. It has no false alarms
+  on the recorded demo traces, but it has not seen many real systems yet.
 
 ## Building the demo system
 

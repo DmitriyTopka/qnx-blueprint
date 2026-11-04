@@ -10,11 +10,14 @@ Checks:
   reply-budget     a server answered, but slower than its budget
   isolation        a process failed (died or stopped answering) and took
                    another one down with it
+  priority-inversion  (experimental, opt-in) a client waited on a lower priority
+                   server while threads in between used the CPU
 """
 
 from __future__ import annotations
 
 from dataclasses import dataclass, field
+import bisect
 from typing import Dict, List, Optional, Set, Tuple
 
 from . import contract as contract_mod
@@ -67,6 +70,7 @@ def run(trace: kev.Trace, contract: contract_mod.Contract,
     findings += check_stuck_replies(ctx, cycles)
     findings += check_reply_budgets(ctx)
     findings += check_isolation(ctx)
+    findings += check_priority_inversion(ctx)
     findings += check_traffic(ctx, findings)
     return findings, topo
 
@@ -289,3 +293,142 @@ def _fault(ctx: Context, name: str, pids: List[int]) -> Tuple[Optional[int], str
             if budget is None or ctx.ms(ctx.t_end - tx.t_send) > budget:
                 return tx.t_send, "stopped answering", tx.send_event
     return None, "", None
+
+
+# ---- priority inversion (experimental, on when the contract sets priority_inversion_ms)
+
+def _running_segments(model: ipc.IpcModel, t_end: int) -> List[Tuple[int, int, int, int, int, int]]:
+    """(start, end, pid, tid, priority, event index) for every stretch a thread ran on a CPU."""
+    out = []
+    current: Dict[int, Tuple[int, int, int, int, int]] = {}   # cpu -> (start, pid, tid, prio, index)
+    for t, cpu, pid, tid, state, prio, index in model.sched:
+        cur = current.get(cpu)
+        if state == ipc.STATE_RUNNING:
+            if cur is not None:
+                out.append((cur[0], t, cur[1], cur[2], cur[3], cur[4]))
+            current[cpu] = (t, pid, tid, prio, index)
+        elif cur is not None and (cur[1], cur[2]) == (pid, tid):
+            out.append((cur[0], t, cur[1], cur[2], cur[3], cur[4]))
+            del current[cpu]
+    for cur in current.values():
+        out.append((cur[0], t_end, cur[1], cur[2], cur[3], cur[4]))
+    out.sort()
+    return out
+
+
+def _thread_timeline(model: ipc.IpcModel) -> Dict[Tuple[int, int], List[Tuple[int, int, int, int]]]:
+    """(pid, tid) -> [(time, state, priority, event index)] in trace order."""
+    out: Dict[Tuple[int, int], List[Tuple[int, int, int, int]]] = {}
+    for t, _cpu, pid, tid, state, prio, index in model.sched:
+        out.setdefault((pid, tid), []).append((t, state, prio, index))
+    return out
+
+
+def _priority_at(timeline, t: int) -> Optional[int]:
+    prio = None
+    for when, _state, p, _index in timeline:
+        if when > t:
+            break
+        prio = p
+    return prio
+
+
+def check_priority_inversion(ctx: Context) -> List[Finding]:
+    """A client waits on a server that runs below the client's priority, and
+    the server sits READY while threads with a priority in between use the CPU.
+
+    QNX normally prevents this: a receiving thread takes the priority of the
+    client. It happens when the channel was created with
+    _NTO_CHF_FIXED_PRIORITY, or when the server waits on something that does
+    not pass priority on.
+    """
+    limit = ctx.contract.priority_inversion_ms
+    if limit is None or not ctx.model.sched:
+        return []
+    timelines = _thread_timeline(ctx.model)
+    segments = _running_segments(ctx.model, ctx.t_end)
+    starts = [s[0] for s in segments]
+
+    held: Dict[Tuple[str, str], dict] = {}
+    for tx in ctx.model.transactions:
+        if tx.server_tid is None or tx.t_receive is None or not ctx.in_contract(tx):
+            continue
+        client_line = timelines.get((tx.client_pid, tx.client_tid))
+        server_line = timelines.get((tx.server_pid, tx.server_tid))
+        if not client_line or not server_line:
+            continue
+        pc = _priority_at(client_line, tx.t_send)
+        if pc is None:
+            continue
+        t_stop = tx.t_reply if tx.t_reply is not None else ctx.t_end
+        lost = 0
+        culprits: Dict[Tuple[int, int, int], int] = {}
+        first_events: List[int] = []
+        server_prio = None
+        for i, (t, state, ps, index) in enumerate(server_line):
+            t_next = server_line[i + 1][0] if i + 1 < len(server_line) else ctx.t_end
+            lo, hi = max(t, tx.t_receive), min(t_next, t_stop)
+            if hi <= lo or state != ipc.STATE_READY or ps >= pc:
+                continue
+            server_prio = ps
+            # Who ran while the server was ready but not running.
+            covered: List[Tuple[int, int]] = []
+            j = max(bisect.bisect_left(starts, lo) - 64, 0)
+            while j < len(segments) and segments[j][0] < hi:
+                s0, s1, pid, tid, pm, ev_index = segments[j]
+                j += 1
+                a, b = max(s0, lo), min(s1, hi)
+                if b <= a or not (ps < pm < pc) or (pid, tid) == (tx.server_pid, tx.server_tid):
+                    continue
+                culprits[(pid, tid, pm)] = culprits.get((pid, tid, pm), 0) + (b - a)
+                covered.append((a, b))
+                if len(first_events) < 2:
+                    first_events.append(ev_index)
+            covered.sort()
+            end = lo
+            for a, b in covered:        # union: two CPUs can both be busy
+                if b > end:
+                    lost += b - max(a, end)
+                    end = b
+            if index not in first_events and len(first_events) < 3:
+                first_events.insert(0, index)
+        if not lost:
+            continue
+        key = (ctx.model.name(tx.client_pid), ctx.model.name(tx.server_pid))
+        entry = held.setdefault(key, {"count": 0, "lost": 0, "worst": 0, "worst_tx": tx,
+                                      "culprits": {}, "pc": pc, "ps": server_prio, "events": first_events})
+        entry["count"] += 1
+        entry["lost"] += lost
+        if lost > entry["worst"]:
+            entry.update(worst=lost, worst_tx=tx, events=first_events, pc=pc, ps=server_prio)
+        for (pid, tid, pm), c in culprits.items():
+            name = ctx.model.name(pid)
+            entry["culprits"][(name, pm)] = entry["culprits"].get((name, pm), 0) + c
+
+    out = []
+    for (client, server), e in sorted(held.items()):
+        worst = ctx.ms(e["worst"])
+        if worst <= limit:
+            continue
+        tx = e["worst_tx"]
+        channel = ctx.model.channels.get((tx.server_pid, tx.chid)) if tx.chid is not None else None
+        fixed = bool(channel and channel.flags & ipc.CHF_FIXED_PRIORITY)
+        culprits = sorted(e["culprits"].items(), key=lambda kv: -kv[1])
+        who = ", ".join(f"{name} (priority {pm}) {ctx.ms(c):.1f} ms" for (name, pm), c in culprits[:3])
+        why = (f"its channel was created with _NTO_CHF_FIXED_PRIORITY, so {server} keeps priority "
+               f"{e['ps']} instead of taking {client}'s {e['pc']}" if fixed else
+               f"{server} ran at priority {e['ps']} although {client} waited at {e['pc']}")
+        events = [tx.send_event] + e["events"] + ([tx.reply_event] if tx.reply_event is not None else [])
+        out.append(Finding(
+            "priority-inversion", ERROR,
+            f"{client} waits on {server} behind lower priority work",
+            f"{e['count']} messages from {client} to {server} sat behind threads with a priority "
+            f"between the two: {why}. Lost time per message up to {worst:.1f} ms "
+            f"(limit {limit:g} ms), {ctx.ms(e['lost']):.1f} ms in total. CPU time taken meanwhile: {who}.",
+            [client, server], events,
+            {"messages": e["count"], "worst_ms": round(worst, 1), "total_ms": round(ctx.ms(e["lost"]), 1),
+             "client_priority": e["pc"], "server_priority": e["ps"], "fixed_priority_channel": fixed,
+             "culprits": [{"process": n, "priority": pm, "ms": round(ctx.ms(c), 1)}
+                          for (n, pm), c in culprits]},
+        ))
+    return out

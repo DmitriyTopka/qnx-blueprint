@@ -22,3 +22,4 @@ isolation:
   camera:
     must_survive: [display]
     min_progress: 3
+priority_inversion_ms: 2

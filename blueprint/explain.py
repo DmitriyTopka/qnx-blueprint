@@ -23,7 +23,7 @@ from typing import Dict, List, Optional
 from . import checks, contract as contract_mod, ipc, kev
 
 MODEL = "claude-opus-5-5"
-PROMPT_VERSION = "1"
+PROMPT_VERSION = "2"
 KEY_FILE = os.path.expanduser("~/.config/blueprint/anthropic_key")
 
 DOCS = {
@@ -57,7 +57,9 @@ call in its own thread, or a server that serves pulses while busy, does.
 - When a server process dies, clients blocked on it are unblocked with an error, and later \
 sends on the connection fail. A client that treats that error as fatal dies with the server.
 - Priority inheritance: a server receiving a message runs at the client's priority, so \
-"the server has lower priority" is usually not the cause of a slow reply.
+"the server has lower priority" is usually not the cause of a slow reply. The exception is a \
+channel created with _NTO_CHF_FIXED_PRIORITY: its receiving threads keep their own priority, \
+so threads with a priority between client and server can run while the client waits.
 
 Rules:
 - Use only the events you are given. Cite them by their id in evidence_event_ids; cite only \
@@ -150,6 +152,18 @@ def evidence_pack(trace: kev.Trace, model: ipc.IpcModel, finding: checks.Finding
     for pid, t in model.deaths.items():
         if model.name(pid) in involved:
             add(model.death_events[pid], t, f"process {model.name(pid)} (pid {pid}) destroyed")
+    sched = {index: (t, cpu, pid, tid, state, prio)
+             for t, cpu, pid, tid, state, prio, index in model.sched if index in seeds}
+    for index, (t, cpu, pid, tid, state, prio) in sched.items():
+        add(index, t, f"{model.name(pid)}[tid {tid}] is {ipc.STATE_NAMES.get(state, state)} "
+                      f"at priority {prio} on CPU {cpu}")
+    for (pid, chid), ch in model.channels.items():
+        if model.name(pid) in involved and finding.check == "priority-inversion":
+            flags = [n for bit, n in ((0x1, "_NTO_CHF_FIXED_PRIORITY"), (0x2, "_NTO_CHF_UNBLOCK"),
+                                      (0x8, "_NTO_CHF_DISCONNECT"), (0x40, "_NTO_CHF_COID_DISCONNECT"))
+                     if ch.flags & bit]
+            add(-(20_000_000 + chid + 1000 * (pid % 1000)), ch.t,
+                f"{model.name(pid)} ChannelCreate chid {chid} flags {ch.flags:#x} ({' | '.join(flags) or 'none'})")
     for i, line in enumerate(finding.data.get("from_snapshot", [])):
         add(-(10_000_000 + i), None, f"{line} (state when the trace stopped)")
     for seed in seeds:
@@ -173,6 +187,17 @@ def build_prompt(finding: checks.Finding, pack: List[dict], con: contract_mod.Co
         parts.append(f"\nSource {os.path.basename(path)}:\n{text}")
     parts.append("\ndoc_refs may be chosen from: " + ", ".join(sorted(DOCS)))
     return "\n".join(parts)
+
+
+def plain_dashes(value):
+    """Replace en and em dashes in model text with a plain hyphen, recursively."""
+    if isinstance(value, str):
+        return value.replace("\u2014", "-").replace("\u2013", "-")
+    if isinstance(value, list):
+        return [plain_dashes(v) for v in value]
+    if isinstance(value, dict):
+        return {k: plain_dashes(v) for k, v in value.items()}
+    return value
 
 
 def cache_key(prompt: str) -> str:
@@ -265,12 +290,13 @@ def explain(trace: kev.Trace, model: ipc.IpcModel, finding: checks.Finding,
     if os.path.exists(path):
         with open(path, encoding="utf-8") as f:
             cached = json.load(f)
-        exp = validate(cached["raw"], finding, pack)
+        exp = validate(plain_dashes(cached["raw"]), finding, pack)
         exp.usage = cached.get("usage", {})
         return exp
     if offline:
         raise ExplainError("no cached explanation for this finding and --offline was given")
     raw, usage = ask_claude(prompt)
+    raw = plain_dashes(raw)
     os.makedirs(cache_dir, exist_ok=True)
     with open(path, "w", encoding="utf-8") as f:
         json.dump({"raw": raw, "usage": usage, "finding": finding.title}, f, indent=2)
