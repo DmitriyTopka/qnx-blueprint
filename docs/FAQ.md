@@ -59,6 +59,16 @@ marked unverified. One explanation averages about 10,500 input and 1,000
 output tokens, about 0.06 USD with claude-opus-5-5. Answers are cached next
 to the contract, so CI and the demo run offline.
 
+## How do you know the parser reads the trace correctly?
+
+We printed every trace in the repository with `traceprinter` from QNX SDP 8.0
+on the target and compared it with Blueprint's reading, event by event, on
+time, CPU, class, kernel call number, thread pid, tid and priority, and
+message rcvid and server pid. 784,765 events across 20 traces on x86_64 and
+aarch64, with and without wide mode: no event missing, none extra, no detail
+different. See `docs/TRACEPRINTER.md`; three printouts run as a test on every
+push.
+
 ## How fast is it?
 
 Checking a 51,196-event trace takes about 0.35 s on an Apple M2 Pro. The
