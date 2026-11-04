@@ -266,6 +266,17 @@ qemu-system-aarch64 -machine virt-4.2 -cpu cortex-a57 -smp 2 -m 1G \
  `demo/cockpit/cockpit-run.sh` records one scenario on the
 target. No SDP files, headers or images are included in this repository.
 
+## How it was built
+
+Dmytro Topka built Blueprint for the QNX Global Hackathon, starting on
+November 3, 2026, with Claude Code (Anthropic) as the coding agent. The idea was
+picked after two rounds of review against the judging criteria and the other
+entries. Every claim about QNX was checked on a running QNX 8.0 target
+before it went into the code or the docs, and several first guesses did not
+survive that: the pid in a send event, what a send timeout does on a
+name_attach channel, which errno a denied connection gets, why a learned
+policy had no rules. The commit history shows the work as it happened.
+
 ## License
 
 Apache-2.0. QNX is a trademark of BlackBerry Limited. This project is not
