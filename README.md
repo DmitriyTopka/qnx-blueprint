@@ -20,6 +20,10 @@ YAML, the contract.
 System Profiler shows you a trace. Blueprint knows what the trace should look
 like and tells you where it does not.
 
+**See it without installing anything:** the reports for every recorded
+scenario and the codelab are at
+[dmitriytopka.github.io/qnx-blueprint](https://dmitriytopka.github.io/qnx-blueprint/).
+
 ## Try it in one minute
 
 No QNX target, SDP or API key needed. The repository ships traces recorded on
