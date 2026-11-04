@@ -250,7 +250,7 @@ h2{font-size:15px;text-transform:uppercase;letter-spacing:.06em;color:var(--mute
 @media (min-width:861px){.arch{position:sticky;top:16px;align-self:start}}
 .summary{margin:0 0 16px;padding-left:22px;font-size:14px}.summary li{margin:3px 0}
 .summary li.error::marker{color:var(--bad)}.summary a{color:var(--ink)}
-.start{margin-left:8px;font-size:11px;font-weight:700;text-transform:uppercase;letter-spacing:.05em;
+.start{white-space:nowrap;display:inline-block;margin-left:8px;font-size:11px;font-weight:700;text-transform:uppercase;letter-spacing:.05em;
 color:#fff;background:var(--bad);padding:1px 7px;border-radius:5px}
 .events{margin:6px 0}.events table{font-size:13px;margin-top:6px}.events td{white-space:normal;vertical-align:top}
 .events td:first-child,.events td:nth-child(2){white-space:nowrap;color:var(--muted)}
