@@ -153,7 +153,8 @@ def check_injections(result: dict, deaths: list[str]) -> list[str]:
     return warnings
 
 
-def print_log(result: dict, out=sys.stdout) -> None:
+def print_log(result: dict, out=None) -> None:
+    out = out or sys.stdout
     for entry in result["log"]:
         state = f"killed {entry['killed']} process(es)" if entry["hit"] else "NOT RUNNING"
         print(f"inject {entry['process']}: {state}", file=out)

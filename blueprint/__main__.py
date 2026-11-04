@@ -193,9 +193,10 @@ def cmd_record(args: argparse.Namespace) -> int:
     print(f"wrote {result['trace']}, {result['snapshot']} ({len(trace.events)} events)")
     if con is None or args.no_check:
         return 0
-    check_args = argparse.Namespace(
-        trace=result["trace"], contract=args.contract, json=args.json, perfetto=args.perfetto,
-        html=args.html, markdown="", snapshot="", explain=False, source=[], offline=False, cache="")
+    # Start from the check command's own defaults, so options added to check
+    # later cannot be missing here.
+    check_args = build_parser().parse_args(["check", result["trace"], "--contract", args.contract])
+    check_args.json, check_args.perfetto, check_args.html = args.json, args.perfetto, args.html
     return cmd_check(check_args)
 
 
@@ -281,6 +282,11 @@ def cmd_demo(args: argparse.Namespace) -> int:
 
 
 def main(argv: list[str] | None = None) -> int:
+    args = build_parser().parse_args(argv)
+    return args.func(args)
+
+
+def build_parser() -> argparse.ArgumentParser:
     parser = argparse.ArgumentParser(prog="blueprint")
     sub = parser.add_subparsers(dest="command", required=True)
     p = sub.add_parser("pairs", help="list MsgSend/MsgReceive/MsgReply transactions")
@@ -342,8 +348,7 @@ def main(argv: list[str] | None = None) -> int:
     p.add_argument("--out", default="out")
     p.add_argument("--online", action="store_true", help="call Claude for explanations missing from the cache")
     p.set_defaults(func=cmd_demo)
-    args = parser.parse_args(argv)
-    return args.func(args)
+    return parser
 
 
 if __name__ == "__main__":

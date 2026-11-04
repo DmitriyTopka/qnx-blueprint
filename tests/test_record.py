@@ -102,5 +102,31 @@ class Record(unittest.TestCase):
         self.assertIn("gps was killed but its death is not in the trace", warnings[1])
 
 
+class RecordThenCheck(unittest.TestCase):
+    """blueprint record --contract runs the full check on what it copied back."""
+
+    def test_record_with_contract_checks_the_trace(self):
+        import contextlib
+        import io
+        from blueprint import __main__ as cli
+        here = os.path.dirname(__file__)
+        demo = os.path.join(here, "..", "demo", "cockpit")
+        trace = os.path.join(demo, "traces", "camera-dies.kev")
+        fake = {"log": [{"process": "camera", "killed": 1, "hit": True, "target_time": 1}],
+                "trace": trace, "snapshot": trace[:-4] + ".pidin"}
+        real = record.record
+        record.record = lambda *a, **k: fake
+        try:
+            out = io.StringIO()
+            with contextlib.redirect_stdout(out):
+                code = cli.main(["record", "root@t", "--inject", "camera@1",
+                                 "-c", os.path.join(demo, "blueprint.yaml")])
+        finally:
+            record.record = real
+        self.assertEqual(code, 1)
+        self.assertIn("inject camera: killed 1 process(es)", out.getvalue())
+        self.assertIn("[isolation]", out.getvalue())
+
+
 if __name__ == "__main__":
     unittest.main()
