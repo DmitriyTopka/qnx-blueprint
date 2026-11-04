@@ -94,8 +94,10 @@ class Policy:
 
 
 _SET = r"(\{[^}]*\}|[A-Za-z0-9_]+)"
-_ALLOW_CHANNEL = re.compile(rf"^allow\s+{_SET}\s+{_SET}\s*:\s*{_SET}\s+{_SET}$", re.S)
-_ALLOW_ABILITY = re.compile(rf"^allow\s+{_SET}\s+self\s*:\s*ability\s+(\{{.*\}}|\S+)$", re.S)
+# allow SUBJECTS OBJECTS:CLASSES PERMISSIONS   (after spaces around ':' and ',' are removed)
+_ALLOW = re.compile(rf"^allow\s+{_SET}\s+{_SET}:{_SET}\s+(\{{.*\}}|\S+)$", re.S)
+_TYPE_NAME = re.compile(r"^[A-Za-z0-9_]+$")
+ALL_TYPES = "*"
 
 
 def _names(token: str) -> List[str]:
@@ -125,9 +127,30 @@ def _statements(text: str) -> Iterable[Tuple[int, str]]:
         raise PolicyError(f"line {start}: statement does not end with ';'")
 
 
+def _connect_targets(number: int, permissions: str) -> List[str]:
+    """Types an ability block lets the subject connect to (ALL_TYPES for a
+    bare channel_connect without a range)."""
+    targets: List[str] = []
+    for item in _names(permissions):
+        if item == "channel_connect":
+            targets.append(ALL_TYPES)
+        elif item.startswith("channel_connect:"):
+            names = [t for t in item.split(":", 1)[1].split(",")]
+            if not names or not all(_TYPE_NAME.match(t) for t in names):
+                raise PolicyError(f"line {number}: cannot read the range of {item!r}")
+            targets += names
+    return targets
+
+
 def parse(text: str) -> Policy:
+    """Read the statements that decide channel connections.
+
+    Fails closed: an allow statement that mentions channels and is not in a
+    form this parser understands is an error, so a rule can never be skipped
+    and turn into a false pass.
+    """
     pol = Policy()
-    pending: List[Tuple[int, List[str], List[str], str]] = []   # resolved after all types are known
+    pending: List[Tuple[int, List[str], List[str]]] = []   # resolved after all types are known
     for number, stmt in _statements(text):
         word = stmt.split(None, 1)[0]
         if word == "type":
@@ -139,30 +162,46 @@ def parse(text: str) -> Policy:
         elif word == "attribute":
             pol.attributes.setdefault(stmt.split()[1], set())
         elif word == "allow":
-            m = _ALLOW_CHANNEL.match(stmt)
-            if m and "channel" in _names(m.group(3)) and "connect" in _names(m.group(4)):
-                pending.append((number, _names(m.group(1)), _names(m.group(2)), "rule"))
+            flat = re.sub(r"\s*([:,])\s*", r"\1", stmt)
+            m = _ALLOW.match(flat)
+            if m is None:
+                if "channel" in stmt:
+                    raise PolicyError(f"line {number}: cannot read this rule: {stmt[:120]}")
                 continue
-            m = _ALLOW_ABILITY.match(stmt)
-            if m:
-                body = m.group(2).strip("{} ")
-                for item in body.split():
-                    if item.startswith("channel_connect:"):
-                        targets = [t for t in item.split(":", 1)[1].split(",") if t]
-                        pending.append((number, _names(m.group(1)), targets, "ability"))
-    for number, subjects, objects, _kind in pending:
-        for s in _expand(pol, subjects):
-            targets = [s] if objects == ["self"] else _expand(pol, objects)
+            subjects, objects = _names(m.group(1)), _names(m.group(2))
+            classes, permissions = _names(m.group(3)), m.group(4)
+            if "channel" in classes and "connect" in _names(permissions):
+                pending.append((number, subjects, objects))
+            if "ability" in classes:
+                # An ability always belongs to the subject, whatever the object.
+                targets = _connect_targets(number, permissions)
+                if targets:
+                    pending.append((number, subjects, targets))
+            elif "channel_connect" in permissions:
+                raise PolicyError(f"line {number}: channel_connect outside an ability rule: {stmt[:120]}")
+    with_rules = {s for _n, subjects, _o in pending for s in subjects}
+    for number, subjects, objects in pending:
+        for s in _expand(pol, subjects, with_rules):
+            if objects == ["self"]:
+                targets = [s]
+            elif ALL_TYPES in objects:
+                targets = sorted(pol.types)
+            else:
+                targets = _expand(pol, objects, with_rules)
             for o in targets:
                 pol.connect.add((s, o))
                 pol.lines.setdefault((s, o), number)
     return pol
 
 
-def _expand(pol: Policy, names: List[str]) -> List[str]:
+def _expand(pol: Policy, names: List[str], with_rules: Set[str] = frozenset()) -> List[str]:
     out: List[str] = []
     for n in names:
-        if n in pol.attributes:
+        if n == "default_rules":
+            # Granted to every type that has an allow rule of its own; taking
+            # all types errs towards reporting more connections, not fewer.
+            out += sorted(pol.types - {"default_rules"})
+        elif n in pol.attributes:
             out += sorted(pol.attributes[n])
         elif n != "self":
             out.append(n)

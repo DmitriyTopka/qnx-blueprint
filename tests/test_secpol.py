@@ -96,5 +96,39 @@ class LearnedOnQnx(unittest.TestCase):
         self.assertEqual(errors(findings), ["policy lets display connect to gps, which the contract forbids"])
 
 
+class FailClosed(unittest.TestCase):
+    """A rule the parser cannot read must never turn into a pass."""
+
+    def test_bare_channel_connect_means_every_type(self):
+        text = read("cockpit.secpol") + "allow display_t self:ability { nonroot channel_connect };\n"
+        self.assertIn("policy lets display connect to gps, which the contract forbids",
+                      errors(secpol.compare(CONTRACT, secpol.parse(text))))
+
+    def test_spaces_in_ranges(self):
+        text = "type a_t; type b_t; type c_t;\nallow a_t self:ability {\n    channel_connect: b_t , c_t\n};"
+        self.assertEqual(secpol.parse(text).connect, {("a_t", "b_t"), ("a_t", "c_t")})
+
+    def test_ability_with_named_object(self):
+        self.assertEqual(secpol.parse("type a_t; type b_t; allow a_t a_t:ability { channel_connect:b_t };").connect,
+                         {("a_t", "b_t")})
+
+    def test_default_rules_cover_every_type(self):
+        text = read("cockpit.secpol") + "allow default_rules self:ability { channel_connect:gps_t };\n"
+        self.assertIn("policy lets display connect to gps, which the contract forbids",
+                      errors(secpol.compare(CONTRACT, secpol.parse(text))))
+
+    def test_unreadable_channel_rules_are_errors(self):
+        for rule in ["allow display_t gps_t channel connect;",
+                     "allow display_t self:ability { channel_connect:gps_t/x };",
+                     "allow display_t gps_t:file { read channel_connect };"]:
+            with self.assertRaises(secpol.PolicyError, msg=rule):
+                secpol.parse("type display_t; type gps_t;\n" + rule)
+
+    def test_other_rules_are_still_ignored(self):
+        pol = secpol.parse("type a_t; allow a_t self:ability { nonroot spawn mem_phys:0x1000-0x2000 };\n"
+                           "allow_attach a_t /dev/x; derive_type a_t run b_t;")
+        self.assertEqual(pol.connect, set())
+
+
 if __name__ == "__main__":
     unittest.main()
