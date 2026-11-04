@@ -23,6 +23,7 @@ like and tells you where it does not.
 **See it without installing anything:** the reports for every recorded
 scenario and the codelab are at
 [dmitriytopka.github.io/qnx-blueprint](https://dmitriytopka.github.io/qnx-blueprint/).
+A 1:49 video of all of it: [youtu.be/Z-WK1Dc1k-M](https://youtu.be/Z-WK1Dc1k-M).
 
 ## Try it in one minute
 
