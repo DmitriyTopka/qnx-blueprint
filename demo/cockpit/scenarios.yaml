@@ -50,3 +50,10 @@ scenarios:
   - name: prio-inversion-fixed
     story: Same load, logger channel without _NTO_CHF_FIXED_PRIORITY inherits 30.
     expect: pass
+  - name: resmgr-ok
+    story: gps is a resource manager at /dev/cockpit/gps; nav uses open() and read().
+    expect: pass
+  - name: resmgr-backdoor
+    story: Same resource manager, display opens /dev/cockpit/gps itself.
+    expect: fail
+    checks: [unexpected-edge]

@@ -138,7 +138,9 @@ def evidence_pack(trace: kev.Trace, model: ipc.IpcModel, finding: checks.Finding
         s = f"{model.name(tx.server_pid)}[tid {tx.server_tid}]" if tx.server_tid else model.name(tx.server_pid)
         add(tx.send_event, tx.t_send,
             f"{c} MsgSend to {model.name(tx.server_pid)} (coid {tx.coid:#x}, chid {tx.chid}) "
-            f"message {tx.preview!r}")
+            f"message {tx.preview!r}"
+            + (f" ({ipc.IO_TYPES[tx.msg_type]}, resource manager protocol)"
+               if tx.msg_type in ipc.IO_TYPES else ""))
         if tx.receive_event is not None:
             add(tx.receive_event, tx.t_receive, f"{s} MsgReceive got the message from {c}")
         if tx.reply_event is not None:

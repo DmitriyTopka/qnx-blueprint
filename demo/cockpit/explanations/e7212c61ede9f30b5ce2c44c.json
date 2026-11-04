@@ -1,0 +1,39 @@
+{
+  "raw": {
+    "cause": "logger's channel is created with _NTO_CHF_FIXED_PRIORITY (event -20327001, flags 0x4b), so when logger receives display's MsgSend it stays at priority 10 instead of inheriting display's 30. media's priority-20 busy loops on both CPUs then preempt logger mid-request (105809/105820/104932), and display (priority 30) sits REPLY-blocked for up to ~47 ms per log line, e.g. receive at 5277.974 ms, reply at 5325.043 ms, against a 2 ms limit.",
+    "evidence_event_ids": [
+      -20327001,
+      105783,
+      105796,
+      105809,
+      105820,
+      104932,
+      109142,
+      103068,
+      103176,
+      113574,
+      115210,
+      119323,
+      119077
+    ],
+    "qnx_call": "ChannelCreate with _NTO_CHF_FIXED_PRIORITY in logger (run_logger); display's MsgSend to logger is REPLY-blocked behind media",
+    "fix_summary": "Drop _NTO_CHF_FIXED_PRIORITY from the logger channel so logger's receiving thread runs at the sender's priority (display 30, nav's priority for nav). If the intent was to keep logging from competing with real work, the synchronous MsgSend contract is the wrong tool. Instead make log_line asynchronous: send a pulse, or queue to a local thread in display.",
+    "fix_patch": "--- a/cockpit.c\n+++ b/cockpit.c\n@@ static void run_logger(void) {\n-    /* The regression: someone made the logger fixed priority so that logging\n-     * never competes with real work. Clients still wait for its reply. */\n-    unsigned flags = _NTO_CHF_DISCONNECT | _NTO_CHF_COID_DISCONNECT | _NTO_CHF_UNBLOCK;\n-    if (!fixed) {\n-        flags |= _NTO_CHF_FIXED_PRIORITY;\n-    }\n+    /* Clients block in MsgSend until we reply, so we must inherit their\n+     * priority: no _NTO_CHF_FIXED_PRIORITY on this channel. */\n+    unsigned flags = _NTO_CHF_DISCONNECT | _NTO_CHF_COID_DISCONNECT | _NTO_CHF_UNBLOCK;\n     int chid = ChannelCreate(flags);",
+    "doc_refs": [
+      "ChannelCreate",
+      "MsgSend",
+      "MsgReceive",
+      "MsgReply",
+      "Synchronous message passing"
+    ],
+    "confidence": "high"
+  },
+  "usage": {
+    "model": "claude-opus-5-5",
+    "input_tokens": 10091,
+    "output_tokens": 852,
+    "cache_read_input_tokens": 1260,
+    "cache_creation_input_tokens": 0
+  },
+  "finding": "display waits on logger behind lower priority work"
+}

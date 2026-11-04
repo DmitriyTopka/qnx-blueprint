@@ -1,7 +1,8 @@
 #!/bin/sh
 # Runs one cockpit scenario on the target under a wide kernel trace.
 #   cockpit-run.sh <scenario> [fixed]
-# Scenarios: ok deadlock backdoor camera-hang camera-dies slow-reply prio-inversion
+# Scenarios: ok deadlock backdoor camera-hang camera-dies slow-reply prio-inversion,
+# and resmgr-ok, resmgr-backdoor with gps as a resource manager
 # LATE=1 starts the trace after the system is up (no ChannelCreate/ConnectAttach in it).
 # SECPOL=1 starts each process with its security type (on -T <name>_t), for a
 # system booted with a policy from `blueprint secpol`.
@@ -13,6 +14,10 @@ if [ "$2" = fixed ]; then
     NAME=$SC-fixed
 fi
 export COCKPIT_FAULT=$SC
+# resmgr-<scenario>: the same scenario with gps as a resource manager.
+case "$SC" in
+    resmgr-*) export COCKPIT_GPS=resmgr COCKPIT_FAULT=${SC#resmgr-} ;;
+esac
 # Start a role, with its security type when SECPOL=1.
 run() {
     if [ -n "$SECPOL" ]; then

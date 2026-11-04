@@ -69,7 +69,7 @@ Replay every recorded scenario:
 blueprint demo
 ```
 
-You should see thirteen rows and the last line
+You should see fifteen rows and the last line
 `all scenarios behaved as expected`. Each row is a real trace recorded on
 QNX 8.0 in QEMU from the demo system in `demo/cockpit`: five processes called
 gps, nav, camera, logger and display.
@@ -82,6 +82,7 @@ gps, nav, camera, logger and display.
 | `slow-reply` | nav answers in 200 ms against a 50 ms budget |
 | `deadlock-late` | the deadlock happened before the trace started |
 | `prio-inversion` | logger keeps priority 10 on a fixed priority channel while display waits at 30 |
+| `resmgr-backdoor` | gps is a resource manager; display opens `/dev/cockpit/gps` itself |
 
 Positive
 : The demo works offline. Explanations of the findings were generated once

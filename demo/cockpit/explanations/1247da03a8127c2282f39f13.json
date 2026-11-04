@@ -1,0 +1,37 @@
+{
+  "raw": {
+    "cause": "logger serves a channel made with ChannelCreate(_NTO_CHF_FIXED_PRIORITY) under the prio-inversion build, so its receiving thread does not inherit the priority of the caller. nav is handling display's request at display's inherited priority 30, but logger keeps its own low priority. The priority-20 media job, busy 45 ms out of every 50, preempts logger in the middle of its 2 ms busy_ms() work. Normal replies take about 2 ms; the slow ones take about 50 ms, one media burst. Example: received at 4797.768, replied at 4848.746, a 51 ms wait.",
+    "evidence_event_ids": [
+      99706,
+      99716,
+      101221,
+      101234,
+      101350,
+      109849,
+      109862,
+      110899,
+      111883,
+      111896,
+      112568
+    ],
+    "qnx_call": "ChannelCreate with _NTO_CHF_FIXED_PRIORITY in logger (run_logger), which delays MsgReply to nav",
+    "fix_summary": "Remove _NTO_CHF_FIXED_PRIORITY from the logger channel, so logger's receiving thread runs at the priority of the client it is serving and media cannot preempt it while nav waits. Currently this only happens with COCKPIT_FIXED=1; make it unconditional. Alternatively, go back to serve(\"cockpit-logger\") / name_attach(), which does not set the flag. If logging really must never compete with real work, change the contract instead: make log_line asynchronous (send a pulse or queue to a logger thread) so no client waits on a low-priority reply.",
+    "fix_patch": "--- a/cockpit.c\n+++ b/cockpit.c\n@@ static void run_logger(void) {\n     unsigned flags = _NTO_CHF_DISCONNECT | _NTO_CHF_COID_DISCONNECT | _NTO_CHF_UNBLOCK;\n-    if (!fixed) {\n-        flags |= _NTO_CHF_FIXED_PRIORITY;\n-    }\n+    /* No _NTO_CHF_FIXED_PRIORITY: logger must inherit its client's priority,\n+     * otherwise media (prio 20) preempts it while nav/display wait for MsgReply. */\n     int chid = ChannelCreate(flags);",
+    "doc_refs": [
+      "ChannelCreate",
+      "MsgReceive",
+      "MsgReply",
+      "MsgSend",
+      "Synchronous message passing"
+    ],
+    "confidence": "high"
+  },
+  "usage": {
+    "model": "claude-opus-5-5",
+    "input_tokens": 10064,
+    "output_tokens": 1253,
+    "cache_read_input_tokens": 1260,
+    "cache_creation_input_tokens": 0
+  },
+  "finding": "logger answers nav too slowly"
+}

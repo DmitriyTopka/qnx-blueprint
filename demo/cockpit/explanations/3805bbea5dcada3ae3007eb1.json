@@ -1,0 +1,35 @@
+{
+  "raw": {
+    "cause": "The 'backdoor' build makes display call gps_open() and read /dev/cockpit/gps directly every tick, bypassing nav. Under COCKPIT_GPS=resmgr that read() is an _IO_CONNECT, then _IO_READ MsgSends, then _IO_CLOSE to gps on chid 1. gps answers each one promptly, so nothing hangs. The violation is architectural: the contract only allows nav -> gps, and display already gets the position inside nav's route reply.",
+    "evidence_event_ids": [
+      53787,
+      53797,
+      53818,
+      81266,
+      79582,
+      79592,
+      79968,
+      88357,
+      88377,
+      88971,
+      89002
+    ],
+    "qnx_call": "MsgSend in display (open()/read()/close() on /dev/cockpit/gps, i.e. _IO_CONNECT/_IO_READ/_IO_CLOSE to gps)",
+    "fix_summary": "Remove the direct gps connection from display and take the position from nav's route reply, which already contains it. If display really needs raw positions, change the contract instead by adding 'display -> gps' to allow:. Do not leave the backdoor in the code.",
+    "fix_patch": "--- a/cockpit.c\n+++ b/cockpit.c\n@@ static int run_display(int ticks) {\n     int nav = connect_to(\"cockpit-nav\");\n     int camera = connect_to(\"cockpit-camera\");\n     int logger = connect_to(\"cockpit-logger\");\n-    int gps = has_fault(\"backdoor\") ? gps_open() : -1;\n@@\n     for (int seq = 0; seq < ticks; seq++) {\n-        cockpit_msg_t route, frame, pos;\n+        cockpit_msg_t route, frame;\n         ask(nav, MSG_ROUTE, seq, \"route?\", &route);\n-        if (gps != -1) {\n-            gps_position(gps, seq, \"where? (direct)\", &pos);\n-        }\n+        /* position arrives via nav: route.text = \"route via pos ...\" */\n",
+    "doc_refs": [
+      "MsgSend",
+      "Synchronous message passing",
+      "name_open"
+    ],
+    "confidence": "high"
+  },
+  "usage": {
+    "model": "claude-opus-5-5",
+    "input_tokens": 9934,
+    "output_tokens": 732,
+    "cache_read_input_tokens": 1260,
+    "cache_creation_input_tokens": 0
+  },
+  "finding": "display talks to gps, which the contract does not allow"
+}

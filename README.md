@@ -193,13 +193,14 @@ violation.
 |---|---|---|
 | `blueprint/kev.py` | kernel trace file format, instrumented kernel `procnto-smp-instr` | reads `tracelogger` output on any host, no SDP needed |
 | `blueprint/ipc.py` | `MsgSendv`, `MsgSendvnc`, `MsgReceivev`, `MsgReplyv`, `MsgError` kernel calls; COMM `SND_MESSAGE`, `REPLY_MESSAGE`; `ConnectAttach`, `ChannelCreate` | rebuilds every message transaction with client, server, channel and timing |
+| `blueprint/ipc.py` | resource manager protocol (`_IO_CONNECT`, `_IO_READ`, ...) | `open()` and `read()` on a device are messages too, so edges to resource managers are checked the same way |
 | `blueprint/ipc.py` | thread states `SEND`, `RECEIVE`, `REPLY` | knows who is blocked on whom when the trace ends |
 | `blueprint/checks.py` | thread state events with priority, `_NTO_CHF_FIXED_PRIORITY` from `ChannelCreate` | priority inversion: who ran while a waiting client's server sat READY |
 | `blueprint/snapshot.py` | `pidin` blocked-on column | sees waits that started before the trace |
 | `blueprint/secpol.py` | security policy language: `type`, `allow_attach`, `channel connect`, the `channel_connect` ability; `secpolcompile`, `secpolgenerate`, `on -T` | turns the contract into kernel-enforced channel rules and checks a learned policy against it |
 | `blueprint/record.py` | `tracelogger -w`, `slay -s KILL`, `pidin` on the target over ssh | kills a process while the trace runs, so its death and the reaction of its clients are both in the trace |
 | `blueprint/checks.py` | synchronous message passing semantics | deadlock, stuck server, reply budget, isolation |
-| `demo/cockpit/cockpit.c` | `name_attach`, `name_open`, `MsgSend`, `MsgReceive`, `MsgReply`, pulses, `_NTO_CHF_UNBLOCK` | a five-process system with realistic faults |
+| `demo/cockpit/cockpit.c` | `name_attach`, `name_open`, `MsgSend`, `MsgReceive`, `MsgReply`, pulses, `_NTO_CHF_UNBLOCK`, `_NTO_CHF_FIXED_PRIORITY`; gps as a resource manager (`resmgr_attach`, `iofunc_*`, `dispatch_*`) | a five-process system with realistic faults |
 
 One thing the demo shows that surprises people: a `TimerTimeout` on `MsgSend`
 does not protect a client from a wedged server. Channels created by

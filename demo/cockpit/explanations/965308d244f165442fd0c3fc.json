@@ -1,0 +1,30 @@
+{
+  "raw": {
+    "cause": "camera served every request normally (last reply at 3240.7 ms) and was then destroyed at 3274.8 ms. On display's next tick, MsgSend() on the dead camera connection returned -1. The camera-dies regression in run_display() treats that error as fatal ('camera failed ... giving up', return 1), so display exited 30 ms after camera instead of continuing to draw nav/logger frames.",
+    "evidence_event_ids": [
+      83151,
+      83161,
+      83171,
+      91117,
+      95162
+    ],
+    "qnx_call": "MsgSend in display (error return from dead camera treated as fatal)",
+    "fix_summary": "Do not exit when MsgSend to camera fails. Degrade to a 'no camera' frame and keep the nav/logger loop running. Better still, build with COCKPIT_FIXED=1 so the camera is read from its own camera_reader thread, which also protects display from a hung camera (a send timeout would not, because of _NTO_CHF_UNBLOCK on name_attach channels).",
+    "fix_patch": "--- a/cockpit.c\n+++ b/cockpit.c\n@@ run_display\n-        } else if (ask(camera, MSG_FRAME, seq, \"frame?\", &frame) == -1) {\n-            fprintf(stderr, \"display: camera failed: %s, giving up\\n\", strerror(errno));\n-            return 1;\n-        }\n+        } else if (camera == -1 || ask(camera, MSG_FRAME, seq, \"frame?\", &frame) == -1) {\n+            if (camera != -1) {\n+                fprintf(stderr, \"display: camera failed: %s, continuing without it\\n\", strerror(errno));\n+                ConnectDetach(camera);\n+                camera = -1;\n+            }\n+            snprintf(frame.text, sizeof(frame.text), \"no camera\");\n+        }\n",
+    "doc_refs": [
+      "MsgSend",
+      "Synchronous message passing",
+      "name_open",
+      "name_attach"
+    ],
+    "confidence": "high"
+  },
+  "usage": {
+    "model": "claude-opus-5-5",
+    "input_tokens": 9643,
+    "output_tokens": 677,
+    "cache_read_input_tokens": 1260,
+    "cache_creation_input_tokens": 0
+  },
+  "finding": "camera died and took display down with it"
+}

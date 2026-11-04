@@ -187,3 +187,23 @@ class TraceLoss(unittest.TestCase):
             self.assertEqual(loss[0].data["missing_buffers"], 1)
         finally:
             os.remove(path)
+
+
+class ResourceManager(unittest.TestCase):
+    """gps as a resource manager at /dev/cockpit/gps: clients use open() and read()."""
+
+    def test_reads_are_seen_as_messages_to_gps(self):
+        from blueprint import ipc
+        trace = kev.read(os.path.join(HERE, "..", "demo", "cockpit", "traces", "resmgr-ok.kev"))
+        model = ipc.build(trace)
+        types = {ipc.IO_TYPES.get(tx.msg_type) for tx in model.transactions
+                 if model.name(tx.client_pid) == "nav" and model.name(tx.server_pid) == "gps"}
+        self.assertIn("_IO_READ", types)
+        self.assertIn("_IO_CONNECT", types)
+        _, errors, warnings = run("resmgr-ok")
+        self.assertEqual((errors, warnings), ([], []))
+
+    def test_display_opening_the_device_is_a_backdoor(self):
+        findings, errors, _ = run("resmgr-backdoor")
+        self.assertEqual(errors, ["unexpected-edge"])
+        self.assertEqual(findings[0].processes, ["display", "gps"])

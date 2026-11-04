@@ -1,0 +1,33 @@
+{
+  "raw": {
+    "cause": "camera answered five frame requests, then on the sixth (camera_frames > 5, COCKPIT_FAULT=camera-hang) camera_handle wedged in pause() after MsgReceive and never called MsgReply. display's main loop calls MsgSend to camera inline with no isolation, so its only thread stays REPLY-blocked forever and never reaches nav or logger again. A send timeout would not help: the name_attach() channel has _NTO_CHF_UNBLOCK, so the client stays blocked until the wedged camera handles the unblock pulse, which it never does.",
+    "evidence_event_ids": [
+      58019,
+      58029,
+      58039,
+      58318,
+      58328,
+      -58319
+    ],
+    "qnx_call": "MsgReply missing in camera (camera_handle hangs); synchronous MsgSend to camera in display's main thread",
+    "fix_summary": "Take the camera MsgSend out of display's drawing loop. A dedicated camera_reader thread does the MsgSend and stores the last frame; the loop only reads that frame under the mutex and shows 'camera stale' when it is old. Make that the unconditional behaviour, not something enabled by COCKPIT_FIXED. Separately fix camera's grabber so it always replies, or calls MsgError on failure.",
+    "fix_patch": "--- a/cockpit.c\n+++ b/cockpit.c\n@@ static int run_display(int ticks) {\n-    if (fixed) {\n-        pthread_t reader;\n-        pthread_create(&reader, NULL, camera_reader, &camera);\n-    }\n+    pthread_t reader;\n+    pthread_create(&reader, NULL, camera_reader, &camera);\n+    pthread_detach(reader);\n@@\n-        if (fixed) {\n-            pthread_mutex_lock(&frame_lock);\n-            if (++frame_age > 3) {\n-                snprintf(frame.text, sizeof(frame.text), \"camera stale\");\n-            } else {\n-                snprintf(frame.text, sizeof(frame.text), \"%s\", last_frame);\n-            }\n-            pthread_mutex_unlock(&frame_lock);\n-        } else if (ask(camera, MSG_FRAME, seq, \"frame?\", &frame) == -1) {\n-            fprintf(stderr, \"display: camera failed: %s, giving up\\n\", strerror(errno));\n-            return 1;\n-        }\n+        pthread_mutex_lock(&frame_lock);\n+        if (++frame_age > 3) {\n+            snprintf(frame.text, sizeof(frame.text), \"camera stale\");\n+        } else {\n+            snprintf(frame.text, sizeof(frame.text), \"%s\", last_frame);\n+        }\n+        pthread_mutex_unlock(&frame_lock);\n",
+    "doc_refs": [
+      "MsgSend",
+      "MsgReply",
+      "MsgReceive",
+      "name_attach",
+      "TimerTimeout",
+      "Synchronous message passing"
+    ],
+    "confidence": "high"
+  },
+  "usage": {
+    "model": "claude-opus-5-5",
+    "input_tokens": 8813,
+    "output_tokens": 1025,
+    "cache_read_input_tokens": 1260,
+    "cache_creation_input_tokens": 0
+  },
+  "finding": "camera stopped answering and took display down with it"
+}

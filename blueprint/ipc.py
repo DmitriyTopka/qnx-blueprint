@@ -62,7 +62,14 @@ PROC_DESTROY_NAME = 4 << 6
 THREAD_NAME = 5 << 6
 
 SIDE_CHANNEL = 0x40000000
-CHF_FIXED_PRIORITY = 0x0001    # _NTO_CHF_FIXED_PRIORITY in <sys/neutrino.h>
+CHF_FIXED_PRIORITY = 0x0001
+# Message types of the resource manager protocol, <sys/iomsg.h> (values
+# printed on a QNX 8.0 target). A client's open(), read() or devctl() reaches
+# the server as one of these.
+IO_TYPES = {0x100: "_IO_CONNECT", 0x101: "_IO_READ", 0x102: "_IO_WRITE", 0x104: "_IO_STAT",
+            0x106: "_IO_DEVCTL", 0x109: "_IO_LSEEK", 0x10D: "_IO_OPENFD", 0x113: "_IO_MSG",
+            0x115: "_IO_DUP", 0x116: "_IO_CLOSE", 0x119: "_IO_SYNC", 0x11E: "_IO_READ64",
+            0x11F: "_IO_WRITE64"}    # _NTO_CHF_FIXED_PRIORITY in <sys/neutrino.h>
 
 
 @dataclass
@@ -99,6 +106,7 @@ class Transaction:
     t_receive: Optional[int] = None
     t_reply: Optional[int] = None
     reply_preview: str = ""
+    msg_type: Optional[int] = None     # first 16 bits of the message (wide mode)
     status: str = "sent"               # sent -> received -> replied | error
     receive_event: Optional[int] = None
     reply_event: Optional[int] = None
@@ -224,6 +232,8 @@ def build(trace: kev.Trace) -> IpcModel:
             coid = w[0]
             preview = kev.text_from_words(w[5:8]) if wide else ""
             tx = Transaction(pid, tid, coid, ev.t_cycles, ev.index, preview)
+            if wide and len(w) > 5:
+                tx.msg_type = w[5] & 0xFFFF
             conn = model.connections.get((pid, coid))
             if conn is not None:
                 tx.chid = conn.chid

@@ -1,0 +1,27 @@
+{
+  "raw": {
+    "cause": "nav handles display's MSG_ROUTE by calling MsgSend() to gps (MSG_POSITION) and is REPLY-blocked on gps. In the deadlock build, gps_handle() calls MsgSend() back to nav (MSG_HINT) before replying. nav's only thread is stuck in its own MsgSend() and never gets back to MsgReceive(), so gps stays SEND-blocked, nav stays REPLY-blocked, and display waits behind nav forever. The gps -> nav send also breaks the contract, which allows only nav -> gps.",
+    "evidence_event_ids": [
+      -10000001,
+      -10000000
+    ],
+    "qnx_call": "MsgSend from gps to nav (MSG_HINT) inside gps_handle, made before MsgReply to nav",
+    "fix_summary": "Remove the gps -> nav send. gps must answer MSG_POSITION using only its own state and must never send up the hierarchy to its client (blueprint allows nav -> gps only). If gps really needs hints from nav, nav should push them down in the request, for example in the text or subtype field of MSG_POSITION, or with a separate nav -> gps message. Calling back to nav is never correct.",
+    "fix_patch": "--- a/cockpit.c\n+++ b/cockpit.c\n@@ static int gps_handle(int rcvid, cockpit_msg_t *msg, cockpit_msg_t *reply) {\n     (void)rcvid;\n-    if (has_fault(\"deadlock\") && msg->type == MSG_POSITION) {\n-        /* The regression: gps wants a route hint from nav before answering.\n-         * nav is blocked waiting on us, so neither side ever replies. */\n-        if (gps_nav == -1) {\n-            gps_nav = connect_to(\"cockpit-nav\");\n-        }\n-        cockpit_msg_t hint;\n-        ask(gps_nav, MSG_HINT, msg->seq, \"hint?\", &hint);\n-    }\n+    /* gps is a leaf server: it must never MsgSend() to nav, its own client.\n+     * Any hint nav wants to give travels down in the MSG_POSITION request. */\n     snprintf(reply->text, sizeof(reply->text), \"pos %d.%03d\", 50, 450 + msg->seq % 100);\n     return 0;\n }",
+    "doc_refs": [
+      "MsgSend",
+      "MsgReceive",
+      "MsgReply",
+      "Synchronous message passing"
+    ],
+    "confidence": "high"
+  },
+  "usage": {
+    "model": "claude-opus-5-5",
+    "input_tokens": 8130,
+    "output_tokens": 847,
+    "cache_read_input_tokens": 1260,
+    "cache_creation_input_tokens": 0
+  },
+  "finding": "deadlock: nav -> gps -> nav"
+}

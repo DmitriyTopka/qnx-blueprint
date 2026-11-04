@@ -29,6 +29,10 @@
  *               while display (priority 30) waits on it; run it next to
  *               media, a priority 20 job that keeps both CPUs busy
  *
+ * COCKPIT_GPS=resmgr makes gps a resource manager at /dev/cockpit/gps:
+ * nav (and the backdoor display) read positions with open() and read(), the
+ * way most QNX clients talk to drivers and services.
+ *
  * COCKPIT_FIXED=1 turns on the fix for the camera faults: display reads the
  * camera from its own thread and degrades to "camera stale" instead of
  * blocking (see camera_reader below for why a send timeout is not enough).
@@ -48,6 +52,9 @@
 #include <sys/iomsg.h>
 #include <sys/neutrino.h>
 #include <sys/syspage.h>
+#include <fcntl.h>
+#include <sys/iofunc.h>
+#include <sys/resmgr.h>
 
 #define MSG_POSITION 0x1001
 #define MSG_ROUTE    0x1002
@@ -64,6 +71,9 @@ typedef struct {
 
 static const char *fault = "";
 static int fixed;
+static int gps_resmgr;          /* COCKPIT_GPS=resmgr */
+
+#define GPS_PATH "/dev/cockpit/gps"
 
 static int has_fault(const char *name) { return strcmp(fault, name) == 0; }
 
@@ -197,6 +207,81 @@ static int gps_handle(int rcvid, cockpit_msg_t *msg, cockpit_msg_t *reply) {
     return 0;
 }
 
+/* gps as a resource manager: every read() returns the current position. */
+static int gps_reads;
+
+static int gps_io_read(resmgr_context_t *ctp, io_read_t *msg, void *vocb) {
+    iofunc_ocb_t *ocb = vocb;
+    int status = iofunc_read_verify(ctp, msg, ocb, NULL);
+    if (status != EOK) {
+        return status;
+    }
+    if ((msg->i.xtype & _IO_XTYPE_MASK) != _IO_XTYPE_NONE) {
+        return ENOSYS;
+    }
+    char text[48];
+    int n = snprintf(text, sizeof(text), "pos %d.%03d", 50, 450 + gps_reads++ % 100) + 1;
+    if ((size_t)n > msg->i.nbytes) {
+        n = (int)msg->i.nbytes;
+    }
+    MsgReply(ctp->rcvid, n, text, (size_t)n);
+    return _RESMGR_NOREPLY;
+}
+
+static void run_gps_resmgr(void) {
+    static resmgr_connect_funcs_t connect_funcs;
+    static resmgr_io_funcs_t io_funcs;
+    static iofunc_attr_t attr;
+    resmgr_attr_t rattr;
+    dispatch_t *dpp = dispatch_create();
+    if (dpp == NULL) {
+        fprintf(stderr, "cockpit: dispatch_create: %s\n", strerror(errno));
+        exit(2);
+    }
+    memset(&rattr, 0, sizeof(rattr));
+    rattr.nparts_max = 1;
+    rattr.msg_max_size = 2048;
+    iofunc_func_init(_RESMGR_CONNECT_NFUNCS, &connect_funcs, _RESMGR_IO_NFUNCS, &io_funcs);
+    io_funcs.read = gps_io_read;
+    iofunc_attr_init(&attr, S_IFCHR | 0444, NULL, NULL);
+    if (resmgr_attach(dpp, &rattr, GPS_PATH, _FTYPE_ANY, 0, &connect_funcs, &io_funcs, &attr) == -1) {
+        fprintf(stderr, "cockpit: resmgr_attach %s: %s\n", GPS_PATH, strerror(errno));
+        exit(2);
+    }
+    dispatch_context_t *ctp = dispatch_context_alloc(dpp);
+    for (;;) {
+        if ((ctp = dispatch_block(ctp)) != NULL) {
+            dispatch_handler(ctp);
+        }
+    }
+}
+
+/* A handle on gps: a connection to its channel, or a file descriptor on the
+ * resource manager path. */
+static int gps_open(void) {
+    if (!gps_resmgr) {
+        return connect_to("cockpit-gps");
+    }
+    for (int i = 0; i < 200; i++) {
+        int fd = open(GPS_PATH, O_RDONLY);
+        if (fd != -1) {
+            return fd;
+        }
+        sleep_ms(20);
+    }
+    fprintf(stderr, "cockpit: cannot open %s: %s\n", GPS_PATH, strerror(errno));
+    exit(2);
+}
+
+static void gps_position(int gps, int seq, const char *why, cockpit_msg_t *pos) {
+    if (!gps_resmgr) {
+        ask(gps, MSG_POSITION, seq, why, pos);
+        return;
+    }
+    ssize_t n = read(gps, pos->text, sizeof(pos->text) - 1);
+    pos->text[n > 0 ? n : 0] = '\0';
+}
+
 /* ---- nav ---------------------------------------------------------------- */
 
 static int nav_gps = -1;
@@ -209,7 +294,7 @@ static int nav_handle(int rcvid, cockpit_msg_t *msg, cockpit_msg_t *reply) {
         return 0;
     }
     cockpit_msg_t pos;
-    ask(nav_gps, MSG_POSITION, msg->seq, "where?", &pos);
+    gps_position(nav_gps, msg->seq, "where?", &pos);
     if (has_fault("slow-reply")) {
         sleep_ms(200);
     }
@@ -334,7 +419,7 @@ static int run_display(int ticks) {
     int nav = connect_to("cockpit-nav");
     int camera = connect_to("cockpit-camera");
     int logger = connect_to("cockpit-logger");
-    int gps = has_fault("backdoor") ? connect_to("cockpit-gps") : -1;
+    int gps = has_fault("backdoor") ? gps_open() : -1;
 
     if (fixed) {
         pthread_t reader;
@@ -345,7 +430,7 @@ static int run_display(int ticks) {
         cockpit_msg_t route, frame, pos;
         ask(nav, MSG_ROUTE, seq, "route?", &route);
         if (gps != -1) {
-            ask(gps, MSG_POSITION, seq, "where? (direct)", &pos);
+            gps_position(gps, seq, "where? (direct)", &pos);
         }
 
         if (fixed) {
@@ -382,11 +467,15 @@ int main(int argc, char **argv) {
     const char *env = getenv("COCKPIT_FAULT");
     fault = env ? env : "";
     fixed = getenv("COCKPIT_FIXED") && strcmp(getenv("COCKPIT_FIXED"), "1") == 0;
+    gps_resmgr = getenv("COCKPIT_GPS") && strcmp(getenv("COCKPIT_GPS"), "resmgr") == 0;
 
     if (strcmp(role, "gps") == 0) {
+        if (gps_resmgr) {
+            run_gps_resmgr();
+        }
         serve("cockpit-gps", gps_handle);
     } else if (strcmp(role, "nav") == 0) {
-        nav_gps = connect_to("cockpit-gps");
+        nav_gps = gps_open();
         nav_logger = connect_to("cockpit-logger");
         serve("cockpit-nav", nav_handle);
     } else if (strcmp(role, "camera") == 0) {

@@ -1,0 +1,37 @@
+{
+  "raw": {
+    "cause": "nav_handle() sleeps 200 ms (the COCKPIT_FAULT=slow-reply branch, sleep_ms(200)) between MsgReceive() and MsgReply(). Every round trip therefore takes about 203-222 ms against a 50 ms budget. Because MsgSend() is synchronous, display stays REPLY-blocked for the whole time and its frame loop stalls with it. Priority is not a factor: nav is sleeping, not being preempted.",
+    "evidence_event_ids": [
+      56202,
+      56212,
+      56441,
+      57745,
+      57755,
+      61676,
+      64268,
+      64278,
+      68074,
+      83760,
+      83770,
+      -83761
+    ],
+    "qnx_call": "MsgReply delayed in nav (nav_handle sleeps 200 ms before replying to display's MsgSend)",
+    "fix_summary": "Remove the 200 ms sleep from nav's request path so nav replies as soon as it has the gps position. If nav really needs 200 ms of work per route, move that work out of the handler: compute routes in a background thread and reply with the latest one. Only raise reply_budget_ms.nav if the contract is wrong, and a 200 ms route lookup is not acceptable for a display ticking every 50 ms.",
+    "fix_patch": "--- a/cockpit.c\n+++ b/cockpit.c\n@@ static int nav_handle(int rcvid, cockpit_msg_t *msg, cockpit_msg_t *reply) {\n     cockpit_msg_t pos;\n     gps_position(nav_gps, msg->seq, \"where?\", &pos);\n-    if (has_fault(\"slow-reply\")) {\n-        sleep_ms(200);\n-    }\n     snprintf(reply->text, sizeof(reply->text), \"route via %.36s\", pos.text);\n     log_line(nav_logger, msg->seq, \"route sent\");\n     return 0;\n }",
+    "doc_refs": [
+      "MsgSend",
+      "MsgReceive",
+      "MsgReply",
+      "Synchronous message passing"
+    ],
+    "confidence": "high"
+  },
+  "usage": {
+    "model": "claude-opus-5-5",
+    "input_tokens": 10012,
+    "output_tokens": 679,
+    "cache_read_input_tokens": 1260,
+    "cache_creation_input_tokens": 0
+  },
+  "finding": "nav answers display too slowly"
+}

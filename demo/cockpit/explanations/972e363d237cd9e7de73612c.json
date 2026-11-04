@@ -1,0 +1,45 @@
+{
+  "raw": {
+    "cause": "The logger's channel is created with ChannelCreate(_NTO_CHF_FIXED_PRIORITY) under the prio-inversion build. Its receive thread therefore keeps its own low priority instead of inheriting display's priority 30. The priority-20 media job keeps every CPU busy for 45 ms out of each 50 ms, so it preempts logger whenever display is SEND- or REPLY-blocked on it. Logger only gets the CPU in media's 5 ms sleep window, which turns a 2 ms busy_ms() handler into a ~47-53 ms wait. The waits land either before MsgReceive (e.g. 101852\u2192102594: 45 ms SEND-blocked) or between MsgReceive and MsgReply (e.g. 103068\u2192103176: 47.6 ms). Fast cycles of about 2 ms happen when the request lands in media's idle gap.",
+    "evidence_event_ids": [
+      85020,
+      84185,
+      85196,
+      101852,
+      102594,
+      102615,
+      103054,
+      103068,
+      103176,
+      103603,
+      103811,
+      103832,
+      105783,
+      105796,
+      109142,
+      105296,
+      105314,
+      105335
+    ],
+    "qnx_call": "ChannelCreate with _NTO_CHF_FIXED_PRIORITY in logger (run_logger), causing slow MsgReceive/MsgReply to display's MsgSend",
+    "fix_summary": "Drop _NTO_CHF_FIXED_PRIORITY from the logger channel so logger's receiving thread inherits display's priority 30 and outranks media (priority 20) while serving it. This is what COCKPIT_FIXED=1 already does; make it unconditional, or simply serve the logger via name_attach() like the other servers. If logging truly must never compete with real work, change the contract instead: make log_line asynchronous (MsgSendPulse or a queue drained by a separate display thread) so display never waits on logger.",
+    "fix_patch": "--- a/cockpit.c\n+++ b/cockpit.c\n@@ static void run_logger(void) {\n-    unsigned flags = _NTO_CHF_DISCONNECT | _NTO_CHF_COID_DISCONNECT | _NTO_CHF_UNBLOCK;\n-    if (!fixed) {\n-        flags |= _NTO_CHF_FIXED_PRIORITY;\n-    }\n+    /* No _NTO_CHF_FIXED_PRIORITY: logger must inherit the priority of the\n+     * client waiting on it, or mid-priority work (media) starves the reply. */\n+    unsigned flags = _NTO_CHF_DISCONNECT | _NTO_CHF_COID_DISCONNECT | _NTO_CHF_UNBLOCK;\n     int chid = ChannelCreate(flags);",
+    "doc_refs": [
+      "ChannelCreate",
+      "MsgReceive",
+      "MsgReply",
+      "MsgSend",
+      "Synchronous message passing",
+      "name_attach"
+    ],
+    "confidence": "high"
+  },
+  "usage": {
+    "model": "claude-opus-5-5",
+    "input_tokens": 10016,
+    "output_tokens": 1336,
+    "cache_read_input_tokens": 1260,
+    "cache_creation_input_tokens": 0
+  },
+  "finding": "logger answers display too slowly"
+}
