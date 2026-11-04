@@ -64,7 +64,7 @@ to the contract, so CI and the demo run offline.
 We printed every trace in the repository with `traceprinter` from QNX SDP 8.0
 on the target and compared it with Blueprint's reading, event by event, on
 time, CPU, class, kernel call number, thread pid, tid and priority, and
-message rcvid and server pid. 784,765 events across 20 traces on x86_64 and
+message rcvid and server pid. 843,924 events across 21 traces on x86_64 and
 aarch64, with and without wide mode: no event missing, none extra, no detail
 different. See `docs/TRACEPRINTER.md`; three printouts run as a test on every
 push.

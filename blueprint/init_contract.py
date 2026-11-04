@@ -42,6 +42,11 @@ def _q(text: str) -> str:
     return text if plain else json.dumps(text)
 
 
+def _comment(line: str, note: str) -> str:
+    """Line and a trailing comment, with at least two spaces before the '#'."""
+    return f"{line:<32}  # {note}"
+
+
 def _nice(ms: float) -> float:
     """Round a budget up to 1, 2 or 5 times a power of ten."""
     if ms <= 0:
@@ -53,8 +58,15 @@ def _nice(ms: float) -> float:
     return float(10 * base)
 
 
-def select(model: ipc.IpcModel, only: Optional[Sequence[str]] = None) -> Tuple[List[str], List[str]]:
-    """(processes to put in the contract, processes left out)."""
+TRANSIENT = re.compile(r"^(pid\d+|ls|cat|sed|sort|tr|grep|sleep|pidin|slay|on|uname|ifconfig|tracelogger)$")
+
+
+def select(model: ipc.IpcModel, only: Optional[Sequence[str]] = None,
+           include_system: bool = False) -> Tuple[List[str], List[str]]:
+    """(processes to put in the contract, processes left out).
+
+    include_system keeps QNX services too, for mapping a system as it is;
+    short-lived commands and unnamed processes are still left out."""
     talking = set()
     for tx in model.transactions:
         if tx.server_pid is None:
@@ -68,8 +80,9 @@ def select(model: ipc.IpcModel, only: Optional[Sequence[str]] = None) -> Tuple[L
         return [p for p in only], sorted(talking - set(only))
     # A name the contract cannot express is left out (and reported) rather
     # than written into the draft.
+    skip = TRANSIENT if include_system else SYSTEM
     candidates = {p for p in talking
-                  if not SYSTEM.fullmatch(p) and _NAME.fullmatch(p) and p not in RESERVED}
+                  if not skip.fullmatch(p) and _NAME.fullmatch(p) and p not in RESERVED}
     # Keep only processes that exchange messages with another candidate.
     linked = set()
     for tx in model.transactions:
@@ -112,7 +125,9 @@ def draft(trace: kev.Trace, model: ipc.IpcModel, processes: List[str], source: s
         if e.open:
             extra.append(f"{e.open} unanswered")
         note = f"{e.messages} messages" + (", " + ", ".join(extra) if extra else "")
-        lines.append(f"  - {_q(f'{client} -> {server}')}".ljust(34) + f"# {note}")
+        edge = f"{client} -> {server}"
+        plain = _q(client) == client and _q(server) == server   # both plain names: no quotes needed
+        lines.append(_comment(f"  - {edge if plain else _q(edge)}", note))
     if not any(c != s for c, s in topo.edges):
         lines.append("  []  # the trace shows no messages between these processes")
     budgets = {server: _nice(max(v) * headroom) for server, v in lat.items() if v}
@@ -120,8 +135,8 @@ def draft(trace: kev.Trace, model: ipc.IpcModel, processes: List[str], source: s
         lines.append("reply_budget_ms:")
         for server in sorted(budgets):
             v = lat[server]
-            lines.append(f"  {_q(server)}: {budgets[server]:g}".ljust(34)
-                         + f"# slowest reply seen {max(v):.1f} ms, median {statistics.median(v):.2f} ms")
+            lines.append(_comment(f"  {_q(server)}: {budgets[server]:g}",
+                                  f"slowest reply seen {max(v):.1f} ms, median {statistics.median(v):.2f} ms"))
         lines.append(f"  default: {max(budgets.values()):g}")
     pairs = sorted((c, s) for c, s in topo.edges if c != s)
     client, server = pairs[0] if pairs else ("client", "server")

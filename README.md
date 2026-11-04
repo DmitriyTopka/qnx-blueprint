@@ -233,10 +233,18 @@ does not protect a client from a server that stopped answering. Channels created
 times out stays blocked until the server handles the unblock pulse. The fixed
 display reads the camera from its own thread instead.
 
+## On a system we didn't write
+
+`demo/stock` is a trace of a QNX image with none of our processes running,
+only QNX's own services. `blueprint init --all` drafts its map (the shell,
+the process manager, devb-eide, io-sock, pipe, io-usb-otg, eight message
+paths) and the check against that draft passes. See
+[demo/stock/README.md](demo/stock/README.md).
+
 ## Is the parser right?
 
 Every trace in the repository was also printed with QNX's own `traceprinter`
-on the target and compared with Blueprint's reading, event by event: 784,765
+on the target and compared with Blueprint's reading, event by event: 843,924
 events on x86_64 and aarch64, with and without wide mode, and not one missing,
 extra or different. The table is in [docs/TRACEPRINTER.md](docs/TRACEPRINTER.md),
 and `python -m blueprint.tpcompare run.kev run.tp` does the same for your own

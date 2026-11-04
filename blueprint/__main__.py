@@ -137,7 +137,7 @@ def cmd_init(args: argparse.Namespace) -> int:
     model = ipc.build(trace)
     only = [p for p in args.only.split(",") if p] if args.only else None
     try:
-        processes, left_out = init_contract.select(model, only)
+        processes, left_out = init_contract.select(model, only, include_system=args.all)
     except ValueError as e:
         print(f"blueprint: {e}", file=sys.stderr)
         return 2
@@ -357,6 +357,8 @@ def build_parser() -> argparse.ArgumentParser:
     p.add_argument("trace", help="path to a .kev file from tracelogger -w")
     p.add_argument("--only", default="", help="comma-separated processes to put in the contract "
                    "(default: application processes that message each other)")
+    p.add_argument("--all", action="store_true", help="keep QNX services too (procnto, devb-*, io-sock, ...), "
+                   "to map a system as it is")
     p.add_argument("--system", default="my-system", help="system name for the contract")
     p.add_argument("--out", "-o", default="", help="write the draft here instead of stdout")
     p.add_argument("--force", action="store_true", help="overwrite --out if it exists")

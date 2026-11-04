@@ -25,6 +25,8 @@ Every trace in this repository was printed with `traceprinter -f` from QNX SDP 8
 | `tests/data/aarch64/resmgr-backdoor.kev` | aarch64 | 47848 | 40264 | MATCH |
 | `tests/data/cockpit_fast_ok.kev` | x86_64, no -w | 58118 | 47925 | MATCH |
 
-In all, 784765 events, 656687 of them compared in detail: no event missing, none extra, no detail different.
+| `demo/stock/stock.kev` | x86_64, QNX services only | 59159 | 48192 | MATCH |
+
+In all, 843,924 events in 21 traces, 704,879 of them compared in detail: no event missing, none extra, no detail different.
 
 Three of the printouts are kept compressed in `tests/data/traceprinter/`, and `tests/test_traceprinter.py` runs the comparison on every push.

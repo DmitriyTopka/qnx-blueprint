@@ -1,0 +1,26 @@
+# Draft contract from stock.kev (5.0 s, 8 message paths), written by blueprint init.
+# It lists what the system did. Delete every edge you did not design, set the
+# budgets you mean (these are 4x the slowest reply in this one trace;
+# under emulation give more), then run: blueprint check <trace> -c <this file>
+system: qnx-stock
+processes: [devb-eide, io-sock, io-usb-otg, pipe, procnto-smp-instr, sh]
+allow:
+  - devb-eide -> procnto-smp-instr  # 10 messages
+  - io-sock -> io-usb-otg         # 95 messages, 55 errors
+  - io-sock -> procnto-smp-instr  # 110 messages, 10 errors
+  - io-usb-otg -> procnto-smp-instr  # 60 messages
+  - procnto-smp-instr -> devb-eide  # 19 messages
+  - sh -> devb-eide               # 4 messages
+  - sh -> pipe                    # 28 messages
+  - sh -> procnto-smp-instr       # 152 messages, 21 errors
+reply_budget_ms:
+  devb-eide: 100                  # slowest reply seen 18.4 ms, median 0.19 ms
+  io-usb-otg: 50                  # slowest reply seen 8.5 ms, median 1.03 ms
+  pipe: 10                        # slowest reply seen 1.7 ms, median 0.05 ms
+  procnto-smp-instr: 50           # slowest reply seen 8.8 ms, median 0.06 ms
+  default: 100
+# isolation:                     # which process must keep working when another fails
+#   procnto-smp-instr:
+#     must_survive: [devb-eide]
+#     min_progress: 3
+# priority_inversion_ms: 2       # experimental, see the README

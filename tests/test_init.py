@@ -126,5 +126,28 @@ class AwkwardNames(unittest.TestCase):
             contract.parse({"processes": ["a", "b"], "allow": ["a -> b\n"]})
 
 
+
+class StockImage(unittest.TestCase):
+    """A QNX image with only QNX's own services running."""
+
+    def test_draft_maps_the_services_and_passes(self):
+        path = os.path.join(HERE, "..", "demo", "stock", "stock.kev")
+        trace = kev.read(path)
+        model = ipc.build(trace)
+        processes, _ = init_contract.select(model, None, include_system=True)
+        self.assertIn("procnto-smp-instr", processes)
+        self.assertIn("io-sock", processes)
+        con = contract.parse(yaml.safe_load(init_contract.draft(trace, model, processes, "stock.kev")))
+        self.assertIn(("sh", "procnto-smp-instr"), con.allow)
+        findings, _ = checks.run(trace, con)
+        self.assertEqual([f for f in findings if f.severity == checks.ERROR], [])
+        self.assertEqual(con.allow, contract.load(os.path.join(HERE, "..", "demo", "stock", "blueprint.yaml")).allow)
+
+    def test_without_all_there_is_nothing_of_ours(self):
+        trace = kev.read(os.path.join(HERE, "..", "demo", "stock", "stock.kev"))
+        processes, _ = init_contract.select(ipc.build(trace), None)
+        self.assertEqual(processes, [])
+
+
 if __name__ == "__main__":
     unittest.main()
