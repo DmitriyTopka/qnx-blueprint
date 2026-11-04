@@ -38,6 +38,8 @@ def inline(text: str) -> str:
             out.append(f"<code>{esc(p[1:-1])}</code>")
             continue
         p = esc(p)
+        p = re.sub(r"!\[([^\]]*)\]\(([^)\s]+)\)",
+                   lambda m: f'<img src="{m.group(2)}" alt="{m.group(1)}" loading=lazy>', p)
         p = re.sub(r"\[([^\]]+)\]\(([^)\s]+)\)", lambda m: f'<a href="{m.group(2)}">{m.group(1)}</a>', p)
         p = re.sub(r"\*\*([^*]+)\*\*", r"<strong>\1</strong>", p)
         out.append(p)
@@ -114,6 +116,7 @@ CSS = """
 *{box-sizing:border-box}body{margin:0;background:var(--bg);color:var(--ink);
 font:16px/1.6 -apple-system,BlinkMacSystemFont,"Segoe UI",Roboto,sans-serif}
 main{max-width:1040px;margin:0 auto;padding:32px 16px 64px}
+img{max-width:100%;height:auto;border:1px solid var(--line);border-radius:10px;display:block;margin:12px 0}
 a{color:var(--accent)}h1{font-size:34px;line-height:1.2;margin:0 0 12px}h2{margin:40px 0 12px}
 .lead{font-size:19px;color:var(--muted);max-width:760px}
 .card{background:var(--card);border:1px solid var(--line);border-radius:12px;padding:20px;margin:16px 0}
@@ -240,6 +243,7 @@ def main(out: str) -> int:
     with open(os.path.join(out, "index.html"), "w", encoding="utf-8") as f:
         f.write(index(scenarios, stock.returncode == 0))
     os.makedirs(os.path.join(out, "codelab"))
+    shutil.copytree(os.path.join(ROOT, "docs", "codelab", "img"), os.path.join(out, "codelab", "img"))
     with open(os.path.join(out, "codelab", "index.html"), "w", encoding="utf-8") as f:
         f.write(codelab(os.path.join(ROOT, "docs", "codelab", "blueprint-architecture-contracts.md")))
     open(os.path.join(out, ".nojekyll"), "w").close()

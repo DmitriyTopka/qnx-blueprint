@@ -1,6 +1,6 @@
 id: blueprint-architecture-contracts
 title: Check a QNX system's architecture on every build with Blueprint
-summary: Write down which processes may message which, record a kernel trace, and let CI fail when the system stops matching the design.
+summary: Write down which processes may message which, check it against a kernel trace in CI, and let the QNX kernel enforce it. Along the way, two things the docs don't spell out: why a send timeout won't free a REPLY-blocked client, and why secpolgenerate learns nothing while tracelogger runs.
 categories: Developer Tools
 tags: beginner
 difficulty: 2
@@ -106,14 +106,18 @@ Open `out/camera-hang.html` in a browser.
   proposes a patch. It may only cite events Blueprint gave it; anything else
   is removed before you see it.
 
-Now open `out/camera-hang.perfetto.json` at
-[ui.perfetto.dev](https://ui.perfetto.dev). Expand `display`: thread 1 keeps
-running while thread 2 sits in `REPLY-blocked` on a `MsgSend to camera` that
-never got a reply. Click the message slice to see the arrow to the camera
+![The report for camera-hang: the graph, the isolation finding and the events behind it](img/report-camera-hang.png)
+
+Now open `out/camera-hang-fixed.perfetto.json` at
+[ui.perfetto.dev](https://ui.perfetto.dev): the same stuck camera, with the fix.
+Expand `display`: thread 1 keeps drawing while thread 2, the camera reader,
+sits in `REPLY-blocked` on a `MsgSend to camera` that never got a reply. Click the message slice to see the arrow to the camera
 thread that received it.
 
+![Perfetto: display keeps running while its camera reader waits](img/perfetto.png)
+
 Negative
-: A send timeout would not have helped here. Channels created with
+: A send timeout (`TimerTimeout()` before `MsgSend()`) would not have helped here. Channels created with
 `name_attach()` have `_NTO_CHF_UNBLOCK` set, so a REPLY-blocked client stays
 blocked until the server handles the unblock pulse, and a stuck server
 never does. The fixed display reads the camera from its own thread.
@@ -162,7 +166,25 @@ you did not design.
 ---
 
 ## Record a trace on your target
-Duration: 5:00
+Duration: 10:00
+
+No target yet? Build a QEMU image with `mkqnximage` from the SDP. A stock
+image has neither `tracelogger` nor `sshd-auth` where we need them, so add
+them first, in the image folder:
+
+```console
+mkdir -p local/snippets
+echo '[perms=755] bin/tracelogger=usr/sbin/tracelogger' >> local/snippets/system_files.custom
+echo '[perms=555] /usr/libexec/sshd-auth=usr/libexec/sshd-auth' >> local/snippets/ifs_files.custom
+mkqnximage --type=qemu --arch=x86_64 --ssh-ident=$HOME/.ssh/id_ed25519.pub --build
+qemu-system-x86_64 -m 1G -smp 2 -cpu max -display none -serial file:serial.log \
+  -kernel output/ifs.bin -drive file=output/disk-qemu.vmdk,if=ide,id=drv0 \
+  -netdev user,id=net0,hostfwd=tcp::2222-:22 -device virtio-net-pci,netdev=net0
+```
+
+When `serial.log` says `Startup complete`, `ssh -p 2222 root@localhost` gets
+you a shell on QNX 8.0. The first boot under software emulation can take a few
+minutes.
 
 On the target, start the trace in wide mode, exercise the system, and save
 the thread states when the trace stops:
@@ -244,7 +266,7 @@ contract, so the same finding is never paid for twice.
 ---
 
 ## Let the kernel enforce it
-Duration: 5:00
+Duration: 20:00
 
 The contract can also become part of a QNX security policy. Generate the
 channel rules:
@@ -274,6 +296,38 @@ rules for them.
 
 A connection the policy does not allow fails in the kernel with EPERM, so
 `name_open()` returns -1 and `strerror(errno)` says "Operation not permitted".
+
+### A fully secure image, step by step
+
+This is how we booted the demo in `--secpol=secure` mode, where no process
+runs without a policy.
+
+1. Build and boot a learning image: `mkqnximage --secpol=develop --build`.
+   secpolgenerate now watches the system and writes down what it does.
+2. Do everything the secure system will have to do, and nothing it must not:
+   log in with ssh a few times, copy a file both ways with scp, start each of
+   your processes with its type (`on -T sensor_t sensor &`), run them, and use
+   the tools you will need (`pidin`, `slay`). Do not run `tracelogger` now.
+3. Save what it learned and check it against the contract:
+   `cat /dev/secpolgenerate/policy > learned.secpol` on the target, then
+   `blueprint secpol -c blueprint.yaml --check learned.secpol` on the host.
+   A backdoor that ran during learning shows up here as a FAIL.
+4. Add what learning cannot see. Tracing needs
+   `allow user_root_t self:ability { trace };`. On x86_64 we also needed
+   `allow sshd_t self:ability { setgid:0 setuid:0 };` before ssh key logins
+   worked (a second `sshd -d` on another port showed
+   `initgroups: root: Operation not permitted`).
+5. Build and boot the secure image:
+   `mkqnximage --secpol=secure --policy=learned.secpol --build`.
+   Log in, start your processes with their types, and try the build that
+   breaks the contract.
+
+![The kernel refusing the backdoor in secure mode](img/kernel-denies.png)
+
+Negative
+: Keep a way back. If the secure image refuses ssh, the console is the only
+way in. Before you boot one, make sure you can read `serial.log`, or start
+a second debug sshd from the startup snippets that writes to the console.
 
 ---
 
@@ -305,7 +359,7 @@ Duration: 1:00
 - How to write the intended architecture down as a contract.
 - How to record a wide kernel trace and a `pidin` snapshot on a target.
 - How to check a trace locally and in CI, and read the report in Perfetto.
-- How to turn the contract into security policy rules and check a learned policy against it.
+- How to turn the contract into security policy rules, check a learned policy against it, and boot a fully secure image.
 
 Questions and ideas are welcome in the
 [issue tracker](https://github.com/DmitriyTopka/qnx-blueprint/issues).
