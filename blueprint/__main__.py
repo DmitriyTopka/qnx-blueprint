@@ -269,9 +269,19 @@ def _markdown(result: dict, explanations: dict) -> str:
     return "\n".join(lines) + "\n\n"
 
 
+DEMO_DEFAULT = os.path.join("demo", "cockpit", "scenarios.yaml")
+
+
 def cmd_demo(args: argparse.Namespace) -> int:
     import yaml
 
+    if not os.path.exists(args.scenarios) and args.scenarios == DEMO_DEFAULT:
+        # Not in a clone: use the copy installed with the package.
+        args.scenarios = os.path.join(os.path.dirname(os.path.abspath(__file__)), "demo", "cockpit", "scenarios.yaml")
+    if not os.path.exists(args.scenarios):
+        print(f"blueprint demo: {args.scenarios} not found; run it from a clone of "
+              "github.com/DmitriyTopka/qnx-blueprint or pass --scenarios", file=sys.stderr)
+        return 2
     base = os.path.dirname(os.path.abspath(args.scenarios))
     with open(args.scenarios, encoding="utf-8") as f:
         spec = yaml.safe_load(f)
@@ -392,7 +402,7 @@ def build_parser() -> argparse.ArgumentParser:
     p.add_argument("--html", default="", help="check: also write an HTML report")
     p.set_defaults(func=cmd_record)
     p = sub.add_parser("demo", help="replay the recorded cockpit scenarios (no QNX target needed)")
-    p.add_argument("--scenarios", default=os.path.join("demo", "cockpit", "scenarios.yaml"))
+    p.add_argument("--scenarios", default=DEMO_DEFAULT)
     p.add_argument("--out", default="out")
     p.add_argument("--online", action="store_true", help="call Claude for explanations missing from the cache")
     p.set_defaults(func=cmd_demo)

@@ -15,4 +15,11 @@ requires = ["setuptools>=68"]
 build-backend = "setuptools.build_meta"
 
 [tool.setuptools]
-packages = ["blueprint"]
+packages = ["blueprint", "blueprint.demo"]
+package-dir = {"blueprint.demo" = "demo"}
+
+# The recorded demo traces ship inside the package, so `blueprint demo` works
+# after `pip install git+https://...` too, not only from a clone.
+[tool.setuptools.package-data]
+"blueprint.demo" = ["cockpit/*.yaml", "cockpit/*.c", "cockpit/traces/*.kev",
+                    "cockpit/traces/*.pidin", "cockpit/explanations/*.json"]
