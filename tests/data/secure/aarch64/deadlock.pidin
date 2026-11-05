@@ -1,0 +1,118 @@
+     pid tid name                         prio STATE          Blocked                     
+       1   1 /proc/boot/procnto-smp-instr   0f RUNNING                                    
+       1   2 /proc/boot/procnto-smp-instr   0f READY                                      
+       1   3 /proc/boot/procnto-smp-instr 255i INTR                                       
+       1   4 /proc/boot/procnto-smp-instr 255i INTR                                       
+       1   5 /proc/boot/procnto-smp-instr 254i INTR                                       
+       1   6 /proc/boot/procnto-smp-instr 254i INTR                                       
+       1   7 /proc/boot/procnto-smp-instr   1f NANOSLEEP                                  
+       1   8 /proc/boot/procnto-smp-instr  10r ???                                        
+       1   9 /proc/boot/procnto-smp-instr  10r RECEIVE        1                           
+       1  10 /proc/boot/procnto-smp-instr  10r RECEIVE        1                           
+       1  11 /proc/boot/procnto-smp-instr  10r RECEIVE        1                           
+       1  12 /proc/boot/procnto-smp-instr  10r RECEIVE        1                           
+       1  13 /proc/boot/procnto-smp-instr  10r RUNNING                                    
+       1  14 /proc/boot/procnto-smp-instr  10r RECEIVE        1                           
+       1  15 /proc/boot/procnto-smp-instr  10r RECEIVE        1                           
+       1  16 /proc/boot/procnto-smp-instr  11r RECEIVE        1                           
+   20483   1 proc/boot/slogger2            10r RECEIVE        1                           
+   36868   1 proc/boot/devc-serpl011       10r RECEIVE        1                           
+   36868   2 proc/boot/devc-serpl011      254i INTR                                       
+   49158   1 proc/boot/ksh                 10r REPLY          36868                       
+   53253   1 proc/boot/fsevmgr             10r SIGWAITINFO                                
+   53253   2 proc/boot/fsevmgr             10r RECEIVE        1                           
+   53253   3 proc/boot/fsevmgr             10r RECEIVE        2                           
+   53253   4 proc/boot/fsevmgr             10r RECEIVE        1                           
+   61447   1 proc/boot/devb-virtio         10r SIGWAITINFO                                
+   61447   2 proc/boot/devb-virtio         21r RECEIVE        1                           
+   61447   3 proc/boot/devb-virtio        254i INTR                                       
+   61447   4 proc/boot/devb-virtio         21r RECEIVE        4                           
+   61447   5 proc/boot/devb-virtio         10r RECEIVE        5                           
+   61447   6 proc/boot/devb-virtio         10r RECEIVE        6                           
+   61447   7 proc/boot/devb-virtio         10r RECEIVE        3                           
+   61447   8 proc/boot/devb-virtio         10r RECEIVE        3                           
+   61447   9 proc/boot/devb-virtio         10r RECEIVE        3                           
+   61447  10 proc/boot/devb-virtio         10r RECEIVE        3                           
+   61447  11 proc/boot/devb-virtio         10r RECEIVE        3                           
+   61447  12 proc/boot/devb-virtio         10r RECEIVE        3                           
+   61447  13 proc/boot/devb-virtio         10r RECEIVE        3                           
+   61447  14 proc/boot/devb-virtio         10r RECEIVE        3                           
+  131080   1 system/bin/random             10r SIGWAITINFO                                
+  131080   2 system/bin/random             10r NANOSLEEP                                  
+  131080   3 system/bin/random             10r NANOSLEEP                                  
+  131080   4 system/bin/random             10r RECEIVE        1                           
+  131080   5 system/bin/random             10r RECEIVE        2                           
+  147465   1 system/bin/pipe               10r SIGWAITINFO                                
+  147465   3 system/bin/pipe               10r RECEIVE        1                           
+  147465   4 system/bin/pipe               10r RECEIVE        1                           
+  147465   5 system/bin/pipe               10r RECEIVE        1                           
+  147465   6 system/bin/pipe               10r RECEIVE        1                           
+  163850   1 system/bin/devc-pty           10r RECEIVE        1                           
+  172043   1 system/bin/dumper             10r RECEIVE        1                           
+  172043   2 system/bin/dumper             10r RECEIVE        2                           
+  180236   1 system/bin/io-sock            21r SIGWAITINFO                                
+  180236   2 system/bin/io-sock            21r SIGWAITINFO                                
+  180236   3 system/bin/io-sock            21r SEM            53d5cdeed8                  
+  180236   4 system/bin/io-sock            21r SEM            53d5cded58                  
+  180236   5 system/bin/io-sock            21r SEM            53d5cdebd8                  
+  180236   6 system/bin/io-sock            21r SEM            53d5cdea58                  
+  180236   7 system/bin/io-sock            21r SEM            53d5cde8d8                  
+  180236   8 system/bin/io-sock            21r SEM            53d5cde758                  
+  180236   9 system/bin/io-sock            21r SEM            53d5cde5d8                  
+  180236  10 system/bin/io-sock            21r SEM            53d5cde458                  
+  180236  11 system/bin/io-sock            21r SEM            53d5cde2d8                  
+  180236  12 system/bin/io-sock            21r RECEIVE        3                           
+  180236  13 system/bin/io-sock            21r RECEIVE        4                           
+  180236  14 system/bin/io-sock            21r RECEIVE        5                           
+  180236  15 system/bin/io-sock            21r RECEIVE        6                           
+  180236  16 system/bin/io-sock            21r RECEIVE        7                           
+  180236  17 system/bin/io-sock            21r SEM            53d5bc1758                  
+  180236  18 system/bin/io-sock            21r SEM            53d5bc0a58                  
+  180236  19 system/bin/io-sock            21r CONDVAR        (0x53d5b907cc)              
+  180236  20 system/bin/io-sock            21r CONDVAR        (0x53d5b9084c)              
+  180236  21 system/bin/io-sock            21r RECEIVE        8                           
+  180236  22 system/bin/io-sock            21r RECEIVE        9                           
+  180236  23 system/bin/io-sock            21r RECEIVE        10                          
+  180236  24 system/bin/io-sock            21r RECEIVE        2                           
+  180236  25 system/bin/io-sock            21r RECEIVE        1                           
+  180236  26 system/bin/io-sock            21r RECEIVE        1                           
+  180236  27 system/bin/io-sock            21r RECEIVE        2                           
+  180236  28 system/bin/io-sock            21r RECEIVE        2                           
+  180236  29 system/bin/io-sock            21r SEM            53d5cdd458                  
+  180236  30 system/bin/io-sock            21r SEM            53d5cdd2d8                  
+  180236  31 system/bin/io-sock            21r SEM            53d5cdd158                  
+  180236  32 system/bin/io-sock            21r SEM            53d5cdcd58                  
+  180236  33 system/bin/io-sock            21r INTR                                       
+  180236  34 system/bin/io-sock            21r SEM            53d5cdc758                  
+  180236  35 system/bin/io-sock            21r SEM            53d5cdc5d8                  
+  180236  36 system/bin/io-sock            21r RECEIVE        1                           
+  249872   1 system/bin/dhcpcd             10r SIGWAITINFO                                
+  278542   1 system/bin/sshd               10r SIGWAITINFO                                
+  282637   1 system/bin/qconn              10r SIGWAITINFO                                
+  282637   2 system/bin/qconn              10r RECEIVE        1                           
+  290831   1 system/bin/mqueue             10r RECEIVE        1                           
+  319506   1 bin/sh                        10r SIGSUSPEND                                 
+  319507   1 system/bin/io-usb-otg         10r SIGWAITINFO                                
+  319507   2 system/bin/io-usb-otg         10r CONDVAR        (0x2e00c078a0)              
+  319507   3 system/bin/io-usb-otg         10r CONDVAR        (0x2e00c083c0)              
+  319507   4 system/bin/io-usb-otg         10r CONDVAR        (0x2e00c08ee0)              
+  319507   5 system/bin/io-usb-otg         21r RECEIVE        1                           
+  319507   6 system/bin/io-usb-otg         10r RECEIVE        2                           
+  319507   7 system/bin/io-usb-otg         21r RECEIVE        1                           
+  319507   8 system/bin/io-usb-otg         21r RECEIVE        1                           
+  319508   1 proc/boot/sleep               10r NANOSLEEP                                  
+ 1507330   1 system/bin/sshd-session       10r SIGWAITINFO                                
+ 1519633   1 system/bin/sshd-session       10r SIGWAITINFO                                
+ 1519637   1 bin/sh                        10r SIGSUSPEND                                 
+ 1523734   1 bin/sh                        10r SIGSUSPEND                                 
+ 1556504   1 bin/sh                        10r SIGSUSPEND                                 
+ 1556505   1 bin/sh                        10r SIGSUSPEND                                 
+ 1556506   1 bin/sh                        10r SIGSUSPEND                                 
+ 1556507   1 system/bin/logger             10r RECEIVE        1                           
+ 1556508   1 bin/sh                        10r SIGSUSPEND                                 
+ 1556509   1 system/bin/gps                10r NANOSLEEP                                  
+ 1556512   1 system/bin/camera             10r RECEIVE        1                           
+ 1556514   1 system/bin/nav                10r REPLY          1556509                     
+ 1597470   1 bin/sh                        10r SIGSUSPEND                                 
+ 1597471   1 system/bin/display            10r REPLY          1556514                     
+ 1609751   1 proc/boot/pidin               10r REPLY          1                           

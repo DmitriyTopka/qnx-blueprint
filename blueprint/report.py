@@ -130,7 +130,7 @@ def _graph(con: contract_mod.Contract, topo: topology.Topology, findings: List[c
 # Causes before symptoms: a slow reply is often the effect of an inversion or a
 # loop, so the report puts the finding most likely to be the cause first.
 RANK = {"trace-loss": 0, "wait-cycle": 1, "unexpected-edge": 2, "priority-inversion": 3,
-        "isolation": 4, "stuck-reply": 5, "secpol": 6, "reply-budget": 7, "cycle-overrun": 7, "no-traffic": 8}
+        "isolation": 4, "stuck-reply": 5, "secpol": 6, "reply-budget": 7, "cycle-overrun": 7, "kernel-denied": 1, "no-traffic": 8}
 
 
 def _order(findings: List[checks.Finding]) -> List[Tuple[int, checks.Finding]]:

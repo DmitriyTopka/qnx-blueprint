@@ -76,10 +76,15 @@ cockpit on aarch64, recorded and checked:
 | Build | Kernel | Blueprint |
 |---|---|---|
 | ok | allows everything it does | PASS |
-| backdoor, display calls `name_open("cockpit-gps")` | `Operation not permitted` | `no-traffic`: display never started its loop |
-| backdoor with gps as a resource manager, `open("/dev/cockpit/gps")` | `Operation not permitted` | PASS: the forbidden edge never happened |
-| deadlock, gps asks nav for a hint | refuses gps's connection to nav, so there is no loop | `stuck-reply`: gps keeps retrying and holds nav's message |
-| display started without its type | refused even to nav | |
+| backdoor, display calls `name_open("cockpit-gps")` | `Operation not permitted` | `kernel-denied`: the kernel refused display's connection to gps, which the contract forbids |
+| backdoor with gps as a resource manager, `open("/dev/cockpit/gps")` | `Operation not permitted` | `kernel-denied`, the same: the open goes through `ConnectAttach` too |
+| deadlock, gps asks nav for a hint | refuses gps's connection to nav, so there is no loop | `kernel-denied` for gps -> nav, and `stuck-reply`: gps keeps retrying and holds nav's message |
+| display started without its type | refused even to nav | `kernel-denied` for an edge the contract allows: start it with `on -T display_t` |
+
+Each refusal is in the trace: the kernel call exit of `ConnectAttach` carries
+`ret_val:-1, errno:1` (EPERM), 140 of them in the x86_64 backdoor trace and 151
+on aarch64, counted the same by Blueprint and by `traceprinter`. The traces are
+in `tests/data/secure/`.
 
 The policy keeps the architecture from being broken; the trace shows what
 that did to the system.

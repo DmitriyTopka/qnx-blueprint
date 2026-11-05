@@ -182,9 +182,9 @@ def index(scenarios: list, stock_ok: bool) -> str:
     kernel = markdown("""| Build | Kernel | Blueprint |
 |---|---|---|
 | as designed | allows everything it does | PASS |
-| backdoor: display calls `name_open("cockpit-gps")` | `Operation not permitted` | `no-traffic`: display never got going |
-| backdoor through the resource manager: `open("/dev/cockpit/gps")` | `Operation not permitted` | PASS: the forbidden edge never happened |
-| deadlock: gps asks nav for a hint | refuses gps's connection to nav, so there is no loop | `stuck-reply`: gps keeps retrying and holds nav's message |""")
+| backdoor: display calls `name_open("cockpit-gps")` | `Operation not permitted` | `kernel-denied`: the refused connection is in the trace |
+| backdoor through the resource manager: `open("/dev/cockpit/gps")` | `Operation not permitted` | `kernel-denied`, the same |
+| deadlock: gps asks nav for a hint | refuses gps's connection to nav, so there is no loop | `kernel-denied` for gps -> nav, and `stuck-reply` |""")
     body = f"""
 <h1>Blueprint</h1>
 <p class=lead>One contract, two enforcers: Blueprint checks a QNX 8.0 system against its message architecture
@@ -224,7 +224,7 @@ between the shell, procnto, devb-eide, io-sock, pipe and io-usb-otg, and the che
 (<a href='reports/stock.html'>report</a>{'' if stock_ok else ', not built'}).</p>
 <h2>Is the parser right?</h2>
 <p>Every trace in the repository was also printed with QNX's own <code>traceprinter</code> and compared event by event:
-843,924 events in 21 traces, on x86_64 and aarch64, with and without wide mode. None missing, extra or different.
+1,071,509 events in 25 traces, on x86_64 and aarch64, with and without wide mode and in secure mode. None missing, extra or different.
 <a href='{REPO_URL}/blob/main/docs/TRACEPRINTER.md'>The table</a>.</p>
 <p><a href='{REPO_URL}'>Source, README and FAQ on GitHub</a>.</p>
 """

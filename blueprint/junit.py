@@ -11,7 +11,7 @@ from typing import Dict, List
 from xml.sax.saxutils import escape, quoteattr
 
 # The checks every run makes, in the order checks.run makes them.
-CHECKS = ["trace-loss", "trace-mode", "unexpected-edge", "wait-cycle", "stuck-reply",
+CHECKS = ["trace-loss", "trace-mode", "unexpected-edge", "kernel-denied", "wait-cycle", "stuck-reply",
           "reply-budget", "cycle-overrun", "isolation", "priority-inversion", "no-traffic"]
 
 

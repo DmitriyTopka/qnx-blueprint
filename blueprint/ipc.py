@@ -132,6 +132,9 @@ class IpcModel:
     sched: List[Tuple[int, int, int, int, int, int, int]] = field(default_factory=list)
     thread_names: Dict[Tuple[int, int], str] = field(default_factory=dict)
     death_events: Dict[int, int] = field(default_factory=dict)  # pid -> event index
+    # ConnectAttach calls the kernel refused: (time, pid, tid, server pid, chid, errno, event index).
+    # Under a security policy, errno 1 (EPERM) is the policy saying no.
+    refused: List[Tuple[int, int, int, int, int, int, int]] = field(default_factory=list)
 
     def name(self, pid: Optional[int]) -> str:
         if pid is None:
@@ -227,6 +230,9 @@ def build(trace: kev.Trace) -> IpcModel:
             target = attach_args.pop(caller, None)
             if target is not None and coid != 0xFFFFFFFF:
                 model.connections[(pid, coid)] = Connection(pid, coid, target[0], target[1], ev.t_cycles)
+            elif target is not None:
+                errno = w[1] if len(w) > 1 else 0
+                model.refused.append((ev.t_cycles, pid, tid, target[0], target[1], errno, ev.index))
 
         elif number in (KER_MSG_SENDV, KER_MSG_SENDVNC) and not is_exit and w:
             coid = w[0]

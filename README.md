@@ -258,8 +258,8 @@ paths) and the check against that draft passes. See
 ## Is the parser right?
 
 Every trace in the repository was also printed with QNX's own `traceprinter`
-on the target and compared with Blueprint's reading, event by event: 843,924
-events on x86_64 and aarch64, with and without wide mode, and not one missing,
+on the target and compared with Blueprint's reading, event by event: 1,071,509
+events on x86_64 and aarch64, with and without wide mode and in secure mode, and not one missing,
 extra or different. The table is in [docs/TRACEPRINTER.md](docs/TRACEPRINTER.md),
 and `python -m blueprint.tpcompare run.kev run.tp` does the same for your own
 trace.

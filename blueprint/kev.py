@@ -120,6 +120,11 @@ def _iter_slots(data: bytes, offset: int) -> Iterator[tuple[int, int, int, int, 
 
 
 def read(path: str) -> Trace:
+    """Read a .kev file, or a gzip-compressed one (.kev.gz)."""
+    if path.endswith(".gz"):
+        import gzip
+        with gzip.open(path, "rb") as f:
+            return parse(f.read())
     with open(path, "rb") as f:
         return parse(f.read())
 

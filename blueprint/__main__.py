@@ -48,6 +48,14 @@ def cmd_topology(args: argparse.Namespace) -> int:
     return 0
 
 
+def _stem(trace_path: str) -> str:
+    """run.kev or run.kev.gz -> run"""
+    for ext in (".kev.gz", ".kev"):
+        if trace_path.endswith(ext):
+            return trace_path[: -len(ext)]
+    return os.path.splitext(trace_path)[0]
+
+
 def cmd_check(args: argparse.Namespace) -> int:
     try:
         con = contract.load(args.contract)
@@ -56,7 +64,7 @@ def cmd_check(args: argparse.Namespace) -> int:
         print(f"blueprint: {e}", file=sys.stderr)
         return 2
     snap = None
-    snap_path = args.snapshot or os.path.splitext(args.trace)[0] + ".pidin"
+    snap_path = args.snapshot or _stem(args.trace) + ".pidin"
     if os.path.exists(snap_path):
         snap = snapshot.load(snap_path)
     elif args.snapshot:
@@ -310,7 +318,7 @@ def cmd_demo(args: argparse.Namespace) -> int:
     for sc in spec["scenarios"]:
         trace_path = os.path.join(base, "traces", sc["name"] + ".kev")
         trace = kev.read(trace_path)
-        snap_path = os.path.splitext(trace_path)[0] + ".pidin"
+        snap_path = _stem(trace_path) + ".pidin"
         snap = snapshot.load(snap_path) if os.path.exists(snap_path) else None
         findings, topo = checks.run(trace, con, snap)
         errors = [f for f in findings if f.severity == checks.ERROR]

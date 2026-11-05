@@ -76,6 +76,7 @@ def run(trace: kev.Trace, contract: contract_mod.Contract,
     findings += check_trace_loss(ctx)
     findings += check_trace_mode(ctx)
     findings += check_unexpected_edges(ctx)
+    findings += check_kernel_denied(ctx)
     cycles, cycle_findings = check_wait_cycles(ctx)
     findings += cycle_findings
     findings += check_stuck_replies(ctx, cycles)
@@ -274,6 +275,59 @@ def _open_tx(ctx: Context, w: topology.Waiter) -> Optional[ipc.Transaction]:
         if tx.send_event == w.send_event:
             return tx
     return None
+
+
+EPERM = 1
+
+
+def check_kernel_denied(ctx: Context) -> List[Finding]:
+    """Connections the kernel refused with EPERM: a security policy at work.
+
+    A refused edge the contract forbids means the policy did its job, and the
+    build still tries the forbidden path, which is a bug to remove before it
+    ships to a system without the policy. A refused edge the contract allows
+    means the policy and the contract disagree, or the process was started
+    without its type (on -T), and the system cannot work as designed.
+    """
+    names = set(ctx.contract.processes)
+    groups: Dict[Tuple[str, str], List[tuple]] = {}
+    for r in ctx.model.refused:
+        t, pid, tid, server_pid, chid, errno, index = r
+        if errno != EPERM:
+            continue
+        client, server = ctx.model.name(pid), ctx.model.name(server_pid)
+        if client not in names:
+            continue
+        groups.setdefault((client, server), []).append(r)
+    out = []
+    for (client, server), items in sorted(groups.items()):
+        events = [r[6] for r in items[:3]]
+        data = {"refused": len(items), "errno": "EPERM"}
+        if server in names and (client, server) not in ctx.contract.allow:
+            out.append(Finding(
+                "kernel-denied", ERROR,
+                f"the kernel refused {client}'s connection to {server}, which the contract forbids",
+                f"ConnectAttach from {client} to {server} failed {len(items)} time(s) with EPERM: "
+                f"the security policy blocked the path the contract leaves out. The build still "
+                f"tries it, so without the policy it would work. Remove the call from {client}.",
+                [client, server], events, data))
+        elif server in names:
+            out.append(Finding(
+                "kernel-denied", ERROR,
+                f"the kernel refuses {client} -> {server}, which the contract allows",
+                f"ConnectAttach from {client} to {server} failed {len(items)} time(s) with EPERM. "
+                f"Either {client} was started without its type (on -T {client}_t), or the "
+                f"policy has no channel connect rule for this edge. Regenerate it with "
+                f"blueprint secpol, or start {client} with its type.",
+                [client, server], events, data))
+        else:
+            out.append(Finding(
+                "kernel-denied", WARNING,
+                f"the kernel refused {client}'s connection to {server}",
+                f"ConnectAttach from {client} to {server}, outside the contract, failed "
+                f"{len(items)} time(s) with EPERM.",
+                [client, server], events, data))
+    return out
 
 
 def check_reply_budgets(ctx: Context) -> List[Finding]:
