@@ -20,7 +20,7 @@ inputs:
     description: Space-separated source files to show Claude with each finding
     default: ""
   report-dir:
-    description: Where to write report.html, report.json and trace.perfetto.json
+    description: Where to write report.html, report.json, junit.xml and trace.perfetto.json
     default: blueprint-report
 outputs:
   result:
@@ -53,6 +53,7 @@ runs:
       run: |
         mkdir -p "$OUT"
         args=(check "$TRACE" --contract "$CONTRACT" --html "$OUT/report.html" --json "$OUT/report.json"
+              --junit "$OUT/junit.xml"
               --perfetto "$OUT/trace.perfetto.json" --markdown "$GITHUB_STEP_SUMMARY")
         [ -n "$SNAPSHOT" ] && args+=(--snapshot "$SNAPSHOT")
         if [ "$EXPLAIN" = "true" ]; then

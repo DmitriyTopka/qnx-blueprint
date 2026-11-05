@@ -1,5 +1,7 @@
 # Blueprint
 
+[![ci](https://github.com/DmitriyTopka/qnx-blueprint/actions/workflows/ci.yml/badge.svg)](https://github.com/DmitriyTopka/qnx-blueprint/actions/workflows/ci.yml)
+
 One contract, two enforcers: Blueprint checks a QNX 8.0 system against its
 message architecture in CI, and turns the same file into a security policy
 the kernel enforces.
@@ -35,6 +37,10 @@ python3 -m venv .venv && . .venv/bin/activate      # or any Python 3.10+ environ
 python3 -m pip install .
 blueprint demo
 ```
+
+Without a clone, `python3 -m pip install git+https://github.com/DmitriyTopka/qnx-blueprint`
+installs the same recorded traces with the package, and `blueprint demo` runs
+from any directory.
 
 ```
 scenario              expected  got   checks                            story
@@ -149,6 +155,9 @@ pidin > /tmp/run.pidin                   # thread states when the trace stopped
 blueprint check run.kev --contract blueprint.yaml --html report.html --perfetto run.perfetto.json
 ```
 
+`--junit results.xml` writes JUnit XML with one test per check, for GitLab,
+Jenkins or any other CI that reads test results.
+
 The `.pidin` file next to the trace is picked up automatically. It matters when
 the system was already stuck before tracing started: blocked threads produce no
 events, and only `pidin` shows who waits on whom.
@@ -207,14 +216,14 @@ demo and CI runs work offline. One explanation costs about 0.06 USD with
 ## In CI
 
 ```yaml
-- uses: DmitriyTopka/qnx-blueprint@v0.1.0
+- uses: DmitriyTopka/qnx-blueprint@v0.1.1
   with:
     trace: traces/nightly.kev
     contract: blueprint.yaml
 ```
 
-The action writes `report.html`, `report.json` and a Perfetto trace to
-`blueprint-report/`, adds a summary to the job page and fails the job on any
+The action writes `report.html`, `report.json`, `junit.xml` (one test per
+check, for any CI test view) and a Perfetto trace to `blueprint-report/`, adds a summary to the job page and fails the job on any
 violation.
 
 ## What it uses from QNX

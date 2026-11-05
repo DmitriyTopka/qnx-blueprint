@@ -9,7 +9,7 @@ import sys
 
 import os
 
-from . import checks, contract, explain, init_contract, ipc, kev, perfetto, record, report, secpol, snapshot, topology
+from . import checks, contract, explain, init_contract, ipc, junit, kev, perfetto, record, report, secpol, snapshot, topology
 
 
 def cmd_pairs(args: argparse.Namespace) -> int:
@@ -100,6 +100,9 @@ def cmd_check(args: argparse.Namespace) -> int:
     if args.json:
         with open(args.json, "w", encoding="utf-8") as f:
             json.dump(result, f, indent=2)
+    if args.junit:
+        with open(args.junit, "w", encoding="utf-8") as f:
+            f.write(junit.render(result))
     if args.markdown:
         with open(args.markdown, "a", encoding="utf-8") as f:
             f.write(_markdown(result, explanations))
@@ -235,6 +238,7 @@ def cmd_record(args: argparse.Namespace) -> int:
     # later cannot be missing here.
     check_args = build_parser().parse_args(["check", result["trace"], "--contract", args.contract])
     check_args.json, check_args.perfetto, check_args.html = args.json, args.perfetto, args.html
+    check_args.junit = getattr(args, "junit", "")
     return cmd_check(check_args)
 
 
@@ -353,6 +357,7 @@ def build_parser() -> argparse.ArgumentParser:
     p.add_argument("--perfetto", default="", help="also write a Perfetto (Chrome JSON) trace to this file")
     p.add_argument("--html", default="", help="also write a single-file HTML report to this file")
     p.add_argument("--markdown", default="", help="append a Markdown summary to this file (e.g. $GITHUB_STEP_SUMMARY)")
+    p.add_argument("--junit", default="", help="also write JUnit XML, one test per check, to this file")
     p.add_argument("--snapshot", default="", help="pidin output taken when the trace stopped "
                    "(default: <trace>.pidin next to the trace, if present)")
     p.add_argument("--explain", action="store_true", help="explain each error with Claude (cached)")
@@ -400,6 +405,7 @@ def build_parser() -> argparse.ArgumentParser:
     p.add_argument("--json", default="", help="check: also write the report as JSON")
     p.add_argument("--perfetto", default="", help="check: also write a Perfetto trace")
     p.add_argument("--html", default="", help="check: also write an HTML report")
+    p.add_argument("--junit", default="", help="check: also write JUnit XML")
     p.set_defaults(func=cmd_record)
     p = sub.add_parser("demo", help="replay the recorded cockpit scenarios (no QNX target needed)")
     p.add_argument("--scenarios", default=DEMO_DEFAULT)
