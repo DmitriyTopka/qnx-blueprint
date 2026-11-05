@@ -1,0 +1,28 @@
+# uname -a
+QNX noname 8.0.0 2026/06/05-16:21:14EDT QEMU_virt aarch64le
+
+# ls -l /dev/secpolgenerate
+ls: /dev/secpolgenerate: No such file or directory
+
+# md5sum /proc/boot/secpol.bin
+1d7329c936be2ffebb716ee60706f12c  /proc/boot/secpol.bin
+
+# SECPOL=1 cockpit-run.sh ok >/dev/null 2>&1; tail -2 /tmp/ok.out
+display 35: route via pos 50.485 | frame 36
+Killed 
+
+# on -T logger_t logger & on -T gps_t gps & on -T camera_t camera & on -T nav_t nav & sleep 1
+
+# COCKPIT_FAULT=ok on -T display_t display 3
+display 00: route via pos 50.450 | frame 1
+display 01: route via pos 50.451 | frame 2
+display 02: route via pos 50.452 | frame 3
+
+# COCKPIT_FAULT=backdoor on -T display_t display 3
+cockpit: cannot open cockpit-gps: Operation not permitted
+
+# COCKPIT_FAULT=ok display 3
+cockpit: cannot open cockpit-nav: Operation not permitted
+
+# slay -Q -s KILL gps nav camera logger
+

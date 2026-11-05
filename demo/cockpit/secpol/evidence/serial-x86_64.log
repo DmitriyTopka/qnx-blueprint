@@ -1,0 +1,131 @@
+
+non UEFI or UEFI+CSM boot
+ACPI table not found (0x4746434d)
+System behaves poorly without PCID support.
+overriding mask for controller 2, vector_base 0
+---> Loading security policy
+---> Starting slogger2
+---> Starting PCI Services
+---> Starting fsevmgr
+# ---> Starting devb
+Path=0 - Intel 82371SB
+ target=0 lun=0     Direct-Access(0) -          QEMU HARDDISK    Rev: 2.5+---> Mounting file systems
+
+Path=1 - Intel 82371SB
+ target=0 lun=0            CD-ROM(5) - QEMU     QEMU DVD-ROM     Rev: 2.5+
+---> Mounting file systems
+---> Starting Networking
+---> Starting sshd
+---> Starting misc
+debug1: sshd version OpenSSH_10.4, OpenSSL 3.0.20 7 Apr 2026
+debug1: private host key #0: ssh-rsa SHA256:Z4jFA1rREzygPAYqHlS6RrJXUF1C2u+k2rNIfxlxf1o
+debug1: private host key #1: ssh-ed25519 SHA256:Zwy3qEPPzDpWG4qWOhOpHZVrvK5sWBoAWDTY1WXWK08
+
+To exit QEMU, type <ctrl>a x
+
+debug1: rexec_argv[1]='-d'
+debug1: rexec_argv[2]='-e'
+debug1: rexec_argv[3]='-p'
+debug1: rexec_argv[4]='2200'
+debug1: rexec_argv[5]='-f'
+debug1: rexec_argv[6]='/system/etc/ssh/sshd_config'
+debug1: Bind to port 2200 on ::.
+Server listening on :: port 2200.
+debug1: Bind to port 2200 on 0.0.0.0.
+Server listening on 0.0.0.0 port 2200.
+Process count:26
+Startup complete
+QNX noname 8.0.0 2026/06/05-16:26:03EDT x86pc x86_64
+===SLOG===
+Nov 05 10:21:56.526               pci_server.36868              pci_log*     0  INFO ,1,-10,0 [36868:1]:  
+Nov 05 10:21:56.527               pci_server.36868              pci_log      0  INFO ,1,-10,0 [36868:1]: + PCI Server v3.2 init start +
+Nov 05 10:21:56.761               pci_server.36868              pci_log      0  INFO ,1,-10,0 [36868:1]: + PCI Server v3.2 init complete, OK [(PCI_ERR_OK)] +
+Nov 05 10:21:56.761               pci_server.36868              pci_log      0  INFO ,1,-10,0 [36868:1]:  
+Nov 05 10:21:57.544               devb_eide.102408                 slog*     0  (devb-eide) 1.00A (Nov 20 2023 10:08:10)
+Nov 05 10:21:57.553               devb_eide.102408                 slog      0  (libcam.so) (Nov 20 2023 10:07:55) bver 7020018
+Nov 05 10:21:57.582               devb_eide.102408                 slog      0  PCI WARN [102408]: _pci_attach() - deprecated interface. Switch your code to the new PCI server API's in <pci/pci.h>
+Nov 05 10:21:57.589               devb_eide.102408                 slog      0  PCI WARN [102408]: _pci_present() - deprecated interface. Switch your code to the new PCI server API's in <pci/pci.h>
+Nov 05 10:21:57.642               devb_eide.102408                 slog      0  PCI WARN [102408]: _pci_read_config_bus() - deprecated interface. Switch your code to the new PCI server API's in <pci/pci.h>
+Nov 05 10:21:57.648               devb_eide.102408                 slog      0  PCI WARN [102408]: _pci_attach_device() - deprecated interface. Switch your code to the new PCI server API's in <pci/pci.h>
+Nov 05 10:21:57.662               devb_eide.102408                 slog      0  eide_identify_devices: Intel 82371SB vid 0x8086, did 0x7010, class 0x10180 rev 0, busno 0, dfunc 9
+Nov 05 10:21:57.662               devb_eide.102408                 slog      0  eide_identify_devices: cmd_addr 0x1f0, cntl_addr 0x3f4, irq 0xe, chnl 0, udma -1, mdma 2, sdma 0, pio 4
+Nov 05 10:21:57.663               devb_eide.102408                 slog      0  eide_identify_devices: probing dev 0 status 50, error 0
+Nov 05 10:21:57.663               devb_eide.102408                 slog      0  eide_identify_devices: probing dev 1 status 0, error 0
+Nov 05 10:21:57.765               devb_eide.102408                 slog      0  eide_display_identify: mdl QEMU HARDDISK sn QM00001 fw 2.5+ tid 0, cable 80, max udma 5, cur udma 5, max mdma 2, cur mdma 0, max sdma 2, cur sdma 0, pio 4, mblk 16
+Nov 05 10:21:57.797               devb_eide.102408                 slog      0  PCI WARN [102408]: _pci_write_config_bus() - deprecated interface. Switch your code to the new PCI server API's in <pci/pci.h>
+Nov 05 10:21:57.801               devb_eide.102408                 slog      0  eide_init_devices: QEMU HARDDISK path 0, tid 0, udma -1, mdma 2, sdma 0, pio 4, mblk 16
+Nov 05 10:21:57.803               devb_eide.102408                 slog      0  eide_identify_devices: Intel 82371SB vid 0x8086, did 0x7010, class 0x10180 rev 0, busno 0, dfunc 9
+Nov 05 10:21:57.803               devb_eide.102408                 slog      0  eide_identify_devices: cmd_addr 0x170, cntl_addr 0x374, irq 0xf, chnl 1, udma -1, mdma 2, sdma 0, pio 4
+Nov 05 10:21:57.803               devb_eide.102408                 slog      0  eide_identify_devices: probing dev 0 status 50, error 0
+Nov 05 10:21:57.803               devb_eide.102408                 slog      0  eide_identify_devices: probing dev 1 status 0, error 0
+Nov 05 10:21:57.904               devb_eide.102408                 slog      0  eide_identify: chk 4 cmd ec, tid 0, status 41, astatus 41, error 4
+Nov 05 10:21:58.005               devb_eide.102408                 slog      0  eide_display_identify: mdl QEMU DVD-ROM sn QM00003 fw 2.5+ tid 0, cable 40, max udma 5, cur udma 5, max mdma 2, cur mdma 0, max sdma 2, cur sdma 0, pio 4, mblk 0
+Nov 05 10:21:58.009               devb_eide.102408                 slog      0  eide_init_devices: QEMU DVD-ROM path 1, tid 0, udma -1, mdma 2, sdma 0, pio 4, mblk 0
+Nov 05 10:21:58.050               devb_eide.102408                 slog    100  (cam-disk.so) (Nov 20 2023 10:08:01)
+Nov 05 10:21:59.006               devb_eide.102408                 slog      0  xpt_peripheral_drivers:  dlopen cam-cdrom.so errno No such file or directory ptl-1:0:0
+Nov 05 10:21:59.410                  random.172041              qcrypto*     0  qcrypto: default tag: 'random'
+Nov 05 10:21:59.412                  random.172041              qcrypto      0  qcrypto: loading configuration file '/proc/boot/qcrypto.conf'
+Nov 05 10:21:59.521                  random.172041              qcrypto      0  qcrypto: 'openssl-3' plugin loaded
+Nov 05 10:21:59.965                devc_pty.204811                 slog*     0  io-char: Invalid option
+Nov 05 10:22:00.569                 io_sock.221197          main_buffer*     1  io-sock -m phy -m pci -m usb -d vtnet_pci 
+Nov 05 10:22:00.570                 io_sock.221197          main_buffer      1  io-sock fullpath: /system/bin/io-sock
+Nov 05 10:22:00.572                 io_sock.221197          main_buffer      1  io-sock BuildID 2c37e223468d52cec678a9d50f7978df
+Nov 05 10:22:00.638                 io_sock.221197          main_buffer      1  Copyright (c) 1992-2023 The FreeBSD Project.
+Nov 05 10:22:00.639                 io_sock.221197          main_buffer      1  Copyright (c) 1979, 1980, 1983, 1986, 1988, 1989, 1991, 1992, 1993, 1994
+Nov 05 10:22:00.639                 io_sock.221197          main_buffer      1  	The Regents of the University of California. All rights reserved.
+Nov 05 10:22:00.642                 io_sock.221197          main_buffer      1  FreeBSD is a registered trademark of The FreeBSD Foundation.
+Nov 05 10:22:00.643                 io_sock.221197          main_buffer      1  FreeBSD 14.3-RELEASE-p14 n1296-fce9a093feaa 
+Nov 05 10:22:00.643                 io_sock.221197          main_buffer      1  ntox86_64-gcc (QNX8.0.0-rfe1c11236e8a392fdc575fe111bbc8aa4f10d82b-500) 12.2.0
+Nov 05 10:22:00.805                 io_sock.221197          main_buffer      1  wlan: mac acl policy registered
+Nov 05 10:22:00.846                 io_sock.221197          main_buffer      1  aesni0: <AES-CBC,AES-CCM,AES-GCM,AES-ICM,AES-XTS> on QNX
+Nov 05 10:22:00.852                 io_sock.221197          main_buffer      1  Event timer "QNX" frequency 1000 Hz quality 600
+Nov 05 10:22:00.865                 io_sock.221197          main_buffer      1  Timecounters tick every 1.000 msec
+Nov 05 10:22:00.865                 io_sock.221197          main_buffer      1  Timecounter "QNX" frequency 1001616896 Hz quality 600
+Nov 05 10:22:01.464                 io_sock.221197          main_buffer     13  lo0: link state changed to UP
+Nov 05 10:22:01.486                 io_sock.221197          main_buffer      1  io-sock startup complete
+Nov 05 10:22:01.541                 io_sock.221197          main_buffer     24  mods-phy.so: loading module with ""
+Nov 05 10:22:02.109                 io_sock.221197          main_buffer     24  Library fullpath: /system/lib/dll/mods-phy.so
+Nov 05 10:22:02.109                 io_sock.221197          main_buffer     24  Library BuildID da3caabba6f71e3807906e7055312e9f
+Nov 05 10:22:02.122                 io_sock.221197          main_buffer     24  mods-phy.so: loaded
+Nov 05 10:22:02.207                 io_sock.221197          main_buffer     24  mods-pci.so: loading module with ""
+Nov 05 10:22:02.263                 io_sock.221197          main_buffer     24  Library fullpath: /system/lib/dll/mods-pci.so
+Nov 05 10:22:02.263                 io_sock.221197          main_buffer     24  Library BuildID e8ac95294b117672563dcc74f20cb627
+Nov 05 10:22:02.266                 io_sock.221197          main_buffer     24  pci0: <pci-server> on QNX
+Nov 05 10:22:02.305                 io_sock.221197          main_buffer     24  mods-pci.so: loaded
+Nov 05 10:22:02.305                 io_sock.221197          main_buffer     24  mods-usb.so: loading module with ""
+Nov 05 10:22:02.371                 io_sock.221197          main_buffer     24  Library fullpath: /system/lib/dll/mods-usb.so
+Nov 05 10:22:02.371                 io_sock.221197          main_buffer     24  Library BuildID cdce0379fa4a04a9c38f6502bc82ecf3
+Nov 05 10:22:02.381                 io_sock.221197          main_buffer     24  mods-usb.so: loaded
+Nov 05 10:22:02.381                 io_sock.221197          main_buffer     24  devs-vtnet_pci.so: loading module with ""
+Nov 05 10:22:02.401                 io_sock.221197          main_buffer     24  Library fullpath: /system/lib/dll/devs-vtnet_pci.so
+Nov 05 10:22:02.401                 io_sock.221197          main_buffer     24  Library BuildID 8701c29087dcf70dfb97023a7f2c42bd
+Nov 05 10:22:02.404                 io_sock.221197          main_buffer     24  pci0: Bound pci0:0:4:0
+Nov 05 10:22:02.404                 io_sock.221197          main_buffer     24  virtio_pci0: <VirtIO PCI (legacy) Network adapter> on pci0
+Nov 05 10:22:02.411                 io_sock.221197          main_buffer     24  vtnet0: <VirtIO Networking Adapter> on virtio_pci0
+Nov 05 10:22:02.460                 io_sock.221197          main_buffer     24  vtnet0: Ethernet address: 52:54:00:12:34:56
+Nov 05 10:22:02.481                 io_sock.221197          main_buffer     24  vtnet0: added to devs-vtnet_pci.so
+Nov 05 10:22:02.497                 io_sock.221197          main_buffer     24  vtnet0: netmap queues/slots: TX 1/256, RX 1/128
+Nov 05 10:22:02.497                 io_sock.221197          main_buffer     24  122.496598 [ 450] vtnet_netmap_attach       vtnet attached txq=1, txd=256 rxq=1, rxd=128
+Nov 05 10:22:02.499                 io_sock.221197          main_buffer     24  devs-vtnet_pci.so: loaded
+Nov 05 10:22:03.519                 io_sock.221197          main_buffer     13  vtnet0: link state changed to UP
+Nov 05 10:22:03.734                 io_sock.221197          main_buffer     25  io-sock transitioning security type
+Nov 05 10:22:03.948                  dhcpcd.282639                 slog*     0  <30>Nov 05 10:22:03 dhcpcd[282639-1]: dhcpcd-10.0.1 starting
+Nov 05 10:22:04.025                  dhcpcd.282639                 slog      0  <30>Nov 05 10:22:04 dhcpcd[290833-1]: DUID 00:01:00:01:32:7d:b3:e9:52:54:00:12:34:56
+Nov 05 10:22:04.772                  dhcpcd.282639                 slog      0  <30>Nov 05 10:22:04 dhcpcd[290833-1]: vtnet0: IAID 00:12:34:56
+Nov 05 10:22:04.794                  dhcpcd.282639                 slog      0  <30>Nov 05 10:22:04 dhcpcd[290833-1]: vtnet0: soliciting an IPv6 router
+Nov 05 10:22:04.912                 sshd.319502..0                 slog*     0  <38>Nov 05 10:22:04 sshd[319502-1]: Server listening on :: port 22.
+Nov 05 10:22:04.933                 sshd.319502..1                 slog*     0  <38>Nov 05 10:22:04 sshd[319502-1]: Server listening on 0.0.0.0 port 22.
+Nov 05 10:22:05.322                  dhcpcd.282639                 slog      0  <30>Nov 05 10:22:05 dhcpcd[290833-1]: vtnet0: Router Advertisement from fe80::2
+Nov 05 10:22:05.329                  dhcpcd.282639                 slog      0  <30>Nov 05 10:22:05 dhcpcd[290833-1]: vtnet0: adding address fec0::f10b:4734:a702:c54e/64
+Nov 05 10:22:05.384                  dhcpcd.282639                 slog      0  <30>Nov 05 10:22:05 dhcpcd[290833-1]: vtnet0: adding route to fec0::/64
+Nov 05 10:22:06.351                 io_sock.221197          main_buffer     15  nd6_dad_timer: called with non-tentative address fec0::f10b:4734:a702:c54e(vtnet0)
+Nov 05 10:22:07.213                  dhcpcd.282639                 slog      0  <30>Nov 05 10:22:07 dhcpcd[290833-1]: vtnet0: adding default route via fe80::2
+Nov 05 10:22:07.224                  dhcpcd.282639                 slog      0  <30>Nov 05 10:22:07 dhcpcd[290833-1]: vtnet0: soliciting a DHCP lease
+Nov 05 10:22:07.264                  dhcpcd.282639                 slog      0  <30>Nov 05 10:22:07 dhcpcd[290833-1]: vtnet0: offered 10.0.2.15 from 10.0.2.2
+Nov 05 10:22:07.270                  dhcpcd.282639                 slog      0  <30>Nov 05 10:22:07 dhcpcd[290833-1]: vtnet0: probing address 10.0.2.15/24
+Nov 05 10:22:12.704                  dhcpcd.282639                 slog      0  <30>Nov 05 10:22:12 dhcpcd[290833-1]: vtnet0: leased 10.0.2.15 for 86400 seconds
+Nov 05 10:22:12.739                  dhcpcd.282639                 slog      0  <30>Nov 05 10:22:12 dhcpcd[290833-1]: vtnet0: adding route to 10.0.2.0/24
+Nov 05 10:22:12.741                  dhcpcd.282639                 slog      0  <30>Nov 05 10:22:12 dhcpcd[290833-1]: vtnet0: adding default route via 10.0.2.2
+===ERRORS===
+cat: /dev/secpolgenerate/errors: No such file or directory
+===END===

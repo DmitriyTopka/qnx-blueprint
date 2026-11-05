@@ -1,0 +1,4 @@
+OPT_ARCH='x86_64'
+OPT_POLICY='/Users/sirenamc/qnxprojects/secpol/x86-secure2.secpol'
+OPT_SECPOL='secure'
+OPT_TYPE='qemu'

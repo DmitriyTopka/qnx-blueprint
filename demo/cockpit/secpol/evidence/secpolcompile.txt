@@ -1,0 +1,13 @@
+$ secpolcompile -o /tmp/secure-x86_64.bin secure-x86_64.secpol
+exit 0
+$ sha256sum secure-x86_64.secpol /tmp/secure-x86_64.bin
+e44dce7d1a210a04b8ca524ed520cdff92b7166ac83917c6d6d32479cdb4f40b  secure-x86_64.secpol
+e86e23bb76f328afade7eb881271d0e3b517517ac0cf2eb3ab0df54c1d1942c7  /tmp/secure-x86_64.bin
+$ secpolcompile -o /tmp/secure-aarch64.bin secure-aarch64.secpol
+exit 0
+$ sha256sum secure-aarch64.secpol /tmp/secure-aarch64.bin
+f79bf9b13cbda33b646e7384cd7951335db29e7e337876a611669ea0df3bb557  secure-aarch64.secpol
+c695c0dac6f07ece1192b76aac79867266879ef82bce2a2d685f9a52f1003ceb  /tmp/secure-aarch64.bin
+$ md5sum /tmp/secure-aarch64.bin /tmp/secure-x86_64.bin
+1d7329c936be2ffebb716ee60706f12c  /tmp/secure-aarch64.bin
+d2c477c8573cddf99264a5693fc306ab  /tmp/secure-x86_64.bin

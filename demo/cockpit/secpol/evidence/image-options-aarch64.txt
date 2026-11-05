@@ -1,0 +1,4 @@
+OPT_ARCH='aarch64le'
+OPT_POLICY='/Users/sirenamc/qnxprojects/secpol/arm-secure.secpol'
+OPT_SECPOL='secure'
+OPT_TYPE='qemu'

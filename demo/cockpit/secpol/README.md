@@ -65,6 +65,10 @@ not permitted`. Granting `setgid:0` and `setuid:0` to `sshd_t` fixed it. Why
 aarch64 does not need the rule we don't know; the two images differ only in
 architecture.
 
+The serial logs, the image options, `secpolcompile` checksums that match
+`/proc/boot/secpol.bin` on the target, and an ssh session on each image are in
+[`evidence/`](evidence/README.md).
+
 Both secure images run the healthy cockpit, and on both the backdoor fails in
 the kernel with "Operation not permitted". What the kernel does with the
 cockpit on aarch64, recorded and checked:
