@@ -117,6 +117,8 @@ def cmd_check(args: argparse.Namespace) -> int:
         mark = "FAIL" if f.severity == checks.ERROR else "warn"
         print(f"{mark}  [{f.check}] {f.title}")
         print(f"      {f.detail}")
+        if f.data.get("where"):
+            print(f"      where: {f.data['where']}")
         if f.events:
             print(f"      evidence: events {', '.join(map(str, f.events))}")
         if i in explanations:
@@ -265,6 +267,9 @@ def _markdown(result: dict, explanations: dict) -> str:
         for f in result["findings"]:
             mark = "error" if f["severity"] == checks.ERROR else "warning"
             lines.append(f"| {mark} | {_md(f['check'])} | {_md(f['title'])} |")
+        for f in result["findings"]:
+            if f.get("data", {}).get("where"):
+                lines += ["", f"**{_md(f['title'])}**: {_md(f['data']['where'])}"]
         for f in result["findings"]:
             e = f.get("explanation")
             if e:

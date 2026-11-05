@@ -289,8 +289,10 @@ def check_reply_budgets(ctx: Context) -> List[Finding]:
     for (client, server), items in sorted(slow.items()):
         items.sort(key=lambda x: -x[0])
         total = ctx.topo.edges[(client, server)].replied if (client, server) in ctx.topo.edges else len(items)
-        worst = items[0][0]
+        worst, worst_tx = items[0]
         budget = ctx.contract.budget_for(server)
+        parts = breakdown(ctx, worst_tx)
+        where = describe(parts)
         out.append(Finding(
             "reply-budget", ERROR,
             f"{server} answers {client} too slowly",
@@ -299,9 +301,132 @@ def check_reply_budgets(ctx: Context) -> List[Finding]:
             f"emulation they are inflated, so budgets should be generous.",
             [client, server], [tx.send_event for _, tx in items[:3]],
             {"over_budget": len(items), "replies": total, "worst_ms": round(worst, 1),
-             "budget_ms": budget},
+             "budget_ms": budget, "breakdown": parts, "where": f"worst {worst:.1f} ms: {where}"},
         ))
     return out
+
+
+def breakdown(ctx: Context, tx: ipc.Transaction, depth: int = 1) -> List[dict]:
+    """Split the time of one answered message into where it went.
+
+    Follows the server thread that received the message from the send to the
+    reply. Before the receive the message waits: behind another client's
+    message, or while the server is preempted or doing something else. After
+    it, the server is running, preempted (by whom, at what priority), blocked
+    in its own call to another server (which one), sleeping, or in another
+    blocked state. The parts add up to the whole reply time, largest first.
+    """
+    parts: Dict[str, dict] = {}
+    culprits: Dict[str, Dict[str, List[Tuple[int, int]]]] = {}
+
+    inner_of: Dict[str, ipc.Transaction] = {}
+
+    def add(what: str, cycles: int, kind: str, event: Optional[int] = None) -> None:
+        if cycles <= 0:
+            return
+        p = parts.setdefault(what, {"what": what, "kind": kind, "cycles": 0, "events": []})
+        p["cycles"] += cycles
+        if event is not None and len(p["events"]) < 3:
+            p["events"].append(event)
+
+    if tx.server_tid is None or tx.t_receive is None or tx.t_reply is None:
+        return []
+    key = (tx.server_pid, tx.server_tid)
+    line = [(t, st) for t, pid, tid, st in ctx.model.states if (pid, tid) == key]
+    state = ipc.STATE_RECEIVE
+    for t, st in line:
+        if t > tx.t_send:
+            break
+        state = st
+    marks = [(tx.t_send, state)] + [(t, st) for t, st in line if tx.t_send < t < tx.t_reply]
+    if tx.t_receive not in [t for t, _ in marks]:
+        marks.append((tx.t_receive, None))     # split at the receive
+        marks.sort(key=lambda m: m[0])
+    segments = _running_segments(ctx.model, ctx.t_end) if ctx.model.sched else []
+    others = [o for o in ctx.model.transactions
+              if o is not tx and o.server_pid == tx.server_pid and o.t_receive is not None
+              and o.t_receive < tx.t_receive and (o.t_reply or ctx.t_end) > tx.t_send]
+    nested = [o for o in ctx.model.transactions
+              if (o.client_pid, o.client_tid) == key and o.t_send < tx.t_reply
+              and (o.t_reply or ctx.t_end) > tx.t_receive]
+    last = state
+    for i, (t, st) in enumerate(marks):
+        st = last if st is None else st
+        last = st
+        t_next = marks[i + 1][0] if i + 1 < len(marks) else tx.t_reply
+        span = t_next - t
+        before = t < tx.t_receive
+        if st == ipc.STATE_READY:
+            add("server preempted", span, "preempted")
+            who = culprits.setdefault("server preempted", {})
+            for s0, s1, pid, tid, prio, _ev in segments:
+                lo, hi = max(s0, t), min(s1, t_next)
+                if hi > lo and (pid, tid) != key and prio > 0:     # priority 0: the idle thread
+                    label = f"{ctx.model.name(pid)} at priority {prio}"
+                    who.setdefault(label, []).append((lo, hi))
+        elif before:
+            busy = [o for o in others if o.t_receive <= t_next and (o.t_reply or ctx.t_end) >= t]
+            if busy:
+                names = ", ".join(sorted({ctx.model.name(o.client_pid) for o in busy}))
+                add(f"queued behind {names}", span, "queued", busy[0].receive_event)
+            else:
+                add("queued, server busy elsewhere", span, "queued", tx.send_event)
+        elif st == ipc.STATE_RUNNING:
+            add("server running", span, "running")
+        elif st in (ipc.STATE_SEND, ipc.STATE_REPLY):
+            inner = next((o for o in nested if o.t_send <= t + 1 and (o.t_reply or ctx.t_end) >= t), None)
+            target = ctx.model.name(inner.server_pid) if inner else "another server"
+            what = f"server waiting on {target}"
+            add(what, span, "nested", inner.send_event if inner else None)
+            if inner is not None and inner.t_reply is not None:
+                prev = inner_of.get(what)
+                if prev is None or inner.t_reply - inner.t_send > prev.t_reply - prev.t_send:
+                    inner_of[what] = inner
+        elif st == 12:
+            add("server sleeping (NANOSLEEP)", span, "sleep")
+        else:
+            add(f"server blocked ({ipc.STATE_NAMES.get(st, st)})", span, "blocked")
+    out = []
+    for p in sorted(parts.values(), key=lambda p: -p["cycles"]):
+        p["ms"] = round(ctx.ms(p.pop("cycles")), 3)
+        who = {k: _union(v) for k, v in culprits.get(p["what"], {}).items()}
+        if who:
+            top = sorted(who, key=lambda k: -who[k])[:3]
+            p["by"] = [{"thread": k, "ms": round(ctx.ms(who[k]), 3)} for k in top]
+        inner = inner_of.get(p["what"])
+        # Look inside the nested call only when one call explains most of the wait.
+        if inner is not None and depth > 0 and ctx.ms(inner.t_reply - inner.t_send) >= p["ms"] / 2:
+            p["inside"] = breakdown(ctx, inner, depth - 1)
+        out.append(p)
+    return out
+
+
+def _union(spans: List[Tuple[int, int]]) -> int:
+    """Wall time covered by the spans (a thread on two CPUs counts once)."""
+    total, end = 0, None
+    for a, b in sorted(spans):
+        if end is None or a > end:
+            total += b - a
+            end = b
+        elif b > end:
+            total += b - end
+            end = b
+    return total
+
+
+def describe(parts: List[dict], limit: int = 3) -> str:
+    """'server preempted 50.4 ms (mostly media at priority 20), server running 2.0 ms'."""
+    out = []
+    for p in parts[:limit]:
+        if p["ms"] < 0.05:
+            continue
+        text = f"{p['what']} {p['ms']:.1f} ms"
+        if p.get("by"):
+            text += f" (mostly {p['by'][0]['thread']}, {p['by'][0]['ms']:.1f} ms)"
+        if p.get("inside"):
+            text += f" (there: {describe(p['inside'], 1)})"
+        out.append(text)
+    return ", ".join(out)
 
 
 def check_isolation(ctx: Context) -> List[Finding]:

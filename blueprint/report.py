@@ -162,11 +162,41 @@ def _findings(trace: kev.Trace, model: ipc.IpcModel, findings: List[checks.Findi
             f"<article class='finding {f.severity}' id=f{i}>"
             f"<div class=fhead><span class=tag>{_e(f.severity)}</span><code>{_e(f.check)}</code></div>"
             f"<h3>{_e(f.title)}</h3><p>{_e(f.detail)}</p>"
-            f"<p class=evidence>Evidence: trace events {_e(ev)}</p>"
+            + _breakdown(f.data.get("breakdown"), f.data.get("worst_ms"))
+            + f"<p class=evidence>Evidence: trace events {_e(ev)}</p>"
             + _evidence(pack)
             + (_explanation(explanations[i]) if i in explanations else "")
             + "</article>")
     return "".join(items)
+
+
+KIND_COLOR = {"preempted": "var(--bad)", "nested": "var(--warn)", "sleep": "#8a63d2",
+              "queued": "#4a7fd4", "blocked": "var(--muted)", "running": "var(--ok)"}
+
+
+def _breakdown(parts, worst_ms) -> str:
+    """Where the slowest reply's time went, as one bar and a list."""
+    if not parts or not worst_ms:
+        return ""
+    bar, rows = [], []
+    for p in parts:
+        share = 100.0 * p["ms"] / worst_ms
+        color = KIND_COLOR.get(p["kind"], "var(--muted)")
+        if share >= 0.5:
+            bar.append(f"<span style='width:{share:.1f}%;background:{color}' title='{_e(p['what'])}'></span>")
+        if p["ms"] < 0.05:
+            continue
+        extra = ""
+        if p.get("by"):
+            extra = " &middot; " + ", ".join(f"{_e(b['thread'])} {b['ms']:.1f} ms" for b in p["by"])
+        if p.get("inside"):
+            inner = p["inside"][0]
+            extra += f" &middot; there: {_e(inner['what'])} {inner['ms']:.1f} ms"
+            if inner.get("by"):
+                extra += f" ({_e(inner['by'][0]['thread'])})"
+        rows.append(f"<li><i style='background:{color}'></i>{p['ms']:.1f} ms {_e(p['what'])}{extra}</li>")
+    return (f"<div class=why><div class=xhead>Where the slowest reply ({worst_ms:.1f} ms) went</div>"
+            f"<div class=bar>{''.join(bar)}</div><ul>{''.join(rows)}</ul></div>")
 
 
 def _evidence(pack: List[dict]) -> str:
@@ -283,5 +313,8 @@ details summary{cursor:pointer;color:var(--muted);font-size:13px}
 pre{white-space:pre-wrap;font:12px/1.45 ui-monospace,SFMono-Regular,Menlo,monospace;background:var(--card);
 border:1px solid var(--line);border-radius:8px;padding:10px;overflow-x:auto}
 .unverified{color:var(--warn)!important;font-weight:600}
+.why{margin:8px 0}.why .bar{display:flex;height:14px;border-radius:7px;overflow:hidden;background:var(--node);margin:6px 0}
+.why .bar span{display:block;height:100%}.why ul{list-style:none;padding:0;margin:4px 0;font-size:13px}
+.why li{margin:2px 0}.why li i{display:inline-block;width:10px;height:10px;border-radius:2px;margin-right:8px;vertical-align:middle}
 footer{margin-top:18px;color:var(--muted);font-size:13px}
 """

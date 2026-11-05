@@ -46,6 +46,8 @@ def render(result: dict) -> str:
 
 def _text(f: dict) -> str:
     lines = [f["title"], f["detail"]]
+    if f.get("data", {}).get("where"):
+        lines.append("where: " + f["data"]["where"])
     if f.get("events"):
         lines.append("evidence: events " + ", ".join(map(str, f["events"])))
     e = f.get("explanation")
