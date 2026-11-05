@@ -175,12 +175,11 @@ you did not design.
 Duration: 10:00
 
 No target yet? Build a QEMU image with `mkqnximage` from the SDP. A stock
-image has neither `tracelogger` nor `sshd-auth` where we need them, so add
-them first, in the image folder:
+image has `tracelogger` but no `sshd-auth` where sshd looks for it, so add
+that first, in the image folder:
 
 ```console
 mkdir -p local/snippets
-echo '[perms=755] bin/tracelogger=usr/sbin/tracelogger' >> local/snippets/system_files.custom
 echo '[perms=555] /usr/libexec/sshd-auth=usr/libexec/sshd-auth' >> local/snippets/ifs_files.custom
 mkqnximage --type=qemu --arch=x86_64 --ssh-ident=$HOME/.ssh/id_ed25519.pub --build
 qemu-system-x86_64 -m 1G -smp 2 -cpu max -display none -serial file:serial.log \
