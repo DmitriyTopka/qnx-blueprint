@@ -23,7 +23,7 @@ class ReviewTest(unittest.TestCase):
     def answer(self):
         return {"edges": [
             {"client": "display", "server": "gps", "verdict": "suspicious",
-             "reason": "display reads gps directly — nav is the only other client.",
+             "reason": "display reads gps directly \u2014 nav is the only other client.",
              "evidence_event_ids": [self.gps_send, 999999999]},
             {"client": "display", "server": "nav", "verdict": "keep", "reason": "the main path",
              "evidence_event_ids": []},
@@ -40,7 +40,7 @@ class ReviewTest(unittest.TestCase):
             self.assertNotIn(("gps", "display"), marks)
             self.assertEqual(marks[("display", "gps")]["evidence_event_ids"], [self.gps_send])
             self.assertIn("# review (SUSPICIOUS): display reads gps directly - nav", text)
-            self.assertNotIn("—", text)
+            self.assertNotIn("\u2014", text)
             contract.parse(yaml.safe_load(text))          # comments only: still a contract
             # the second run is served from the cache
             again, _ = review.review(self.trace, self.model, self.processes, self.draft, {}, cache, offline=True)
