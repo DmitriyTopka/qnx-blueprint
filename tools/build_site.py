@@ -146,7 +146,7 @@ def page(title: str, body: str, description: str = "") -> str:
             "</footer></main></body></html>")
 
 
-def codelab(src: str) -> str:
+def codelab(src: str, home: str = "../") -> str:
     text = open(src, encoding="utf-8").read()
     head, _, rest = text.partition("\n\n\n")
     meta = dict(l.split(": ", 1) for l in head.splitlines() if ": " in l)
@@ -163,7 +163,7 @@ def codelab(src: str) -> str:
         nav.append(f"<li><a href='#{sid}'>{inline(title)}</a></li>")
         sections.append(f"<section class=step id={sid}><h2>{n}. {inline(title)}</h2>"
                         + (f"<div class=duration>{esc(dur)} min</div>" if dur else "") + markdown(body) + "</section>")
-    body = (f"<p><a href='../'>Blueprint</a> &rsaquo; codelab</p><h1>{inline(meta.get('title', 'Codelab'))}</h1>"
+    body = (f"<p><a href='{home}'>Blueprint</a> &rsaquo; codelab</p><h1>{inline(meta.get('title', 'Codelab'))}</h1>"
             f"<p class=lead>{inline(meta.get('summary', ''))}</p>"
             f"<p class=duration>By {esc(meta.get('authors', ''))}. "
             f"<a href='{REPO_URL}/blob/main/docs/codelab/{os.path.basename(src)}'>Source</a>.</p>"
@@ -204,7 +204,7 @@ cd qnx-blueprint
 python3 -m venv .venv &amp;&amp; . .venv/bin/activate
 python3 -m pip install .
 blueprint demo</code></pre>
-<p>No QNX target, SDP or API key needed. Or read the step-by-step <a href='codelab/'>codelab</a>.</p>
+<p>No QNX target, SDP or API key needed. Or read the step-by-step <a href='codelab/'>codelab</a>, and its companion that boots QNX 8.0 in fully secure mode from a policy you can check: <a href='codelab/secure-image/'>Lock a QNX 8.0 system to its design</a>.</p>
 <h2>Every recorded scenario</h2>
 <p>Traces recorded on QNX 8.0 x86_64 in QEMU from the demo cockpit. Each report is the HTML Blueprint writes;
 open the Perfetto file at <a href='https://ui.perfetto.dev'>ui.perfetto.dev</a> to see every message as an arrow
@@ -250,6 +250,9 @@ def main(out: str) -> int:
     shutil.copytree(os.path.join(ROOT, "docs", "codelab", "img"), os.path.join(out, "codelab", "img"))
     with open(os.path.join(out, "codelab", "index.html"), "w", encoding="utf-8") as f:
         f.write(codelab(os.path.join(ROOT, "docs", "codelab", "blueprint-architecture-contracts.md")))
+    os.makedirs(os.path.join(out, "codelab", "secure-image"))
+    with open(os.path.join(out, "codelab", "secure-image", "index.html"), "w", encoding="utf-8") as f:
+        f.write(codelab(os.path.join(ROOT, "docs", "codelab", "qnx-secure-image.md"), "../../"))
     open(os.path.join(out, ".nojekyll"), "w").close()
     print(f"site in {out}: {len(os.listdir(reports))} report files")
     return 0

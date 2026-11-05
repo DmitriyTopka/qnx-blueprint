@@ -305,9 +305,12 @@ A connection the policy does not allow fails in the kernel with EPERM, so
 
 ### A fully secure image, step by step
 
+The full walk-through, run from scratch with every output, is its own codelab:
+[Lock a QNX 8.0 system to its design with a security policy](https://dmitriytopka.github.io/qnx-blueprint/codelab/secure-image/).
+
 The serial logs, image options and ssh sessions of the two secure images
 this step was tested on are in
-[`demo/cockpit/secpol/evidence`](https://github.com/DmitriyTopka/qnx-blueprint/tree/main/demo/cockpit/secpol/evidence).
+[demo/cockpit/secpol/evidence](https://github.com/DmitriyTopka/qnx-blueprint/tree/main/demo/cockpit/secpol/evidence).
 
 This is how we booted the demo in `--secpol=secure` mode, where no process
 runs without a policy.
