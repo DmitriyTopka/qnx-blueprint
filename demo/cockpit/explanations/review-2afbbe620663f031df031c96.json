@@ -1,0 +1,82 @@
+{
+  "raw": {
+    "edges": [
+      {
+        "client": "display",
+        "server": "camera",
+        "verdict": "keep",
+        "reason": "Display is camera's only client, with 50 clean request-reply pairs once per cycle and no errors or unanswered sends.",
+        "evidence_event_ids": [
+          57176,
+          57495,
+          59037
+        ]
+      },
+      {
+        "client": "display",
+        "server": "gps",
+        "verdict": "suspicious",
+        "reason": "Display reads gps directly, bypassing nav, which already queries gps every cycle. Display sends the same 0x01 request as nav, a few tenths of a millisecond after nav's query; confirm this direct path was designed and is not a leftover shortcut.",
+        "evidence_event_ids": [
+          57138,
+          57457,
+          58999,
+          57029,
+          57363,
+          58905
+        ]
+      },
+      {
+        "client": "display",
+        "server": "logger",
+        "verdict": "keep",
+        "reason": "Display logging alongside nav is a normal shared-logger pattern, with 50 clean messages and no errors. One send (id 60622) has an id out of time order, which is probably a trace artifact.",
+        "evidence_event_ids": [
+          57255,
+          60622,
+          59124
+        ]
+      },
+      {
+        "client": "display",
+        "server": "nav",
+        "verdict": "keep",
+        "reason": "Display queries nav once per cycle and is its only client, which looks like the intended layering. Nav's median reply of 0.83 ms is consistent with nav calling gps and logger downstream.",
+        "evidence_event_ids": [
+          57009,
+          57343,
+          58885
+        ]
+      },
+      {
+        "client": "nav",
+        "server": "gps",
+        "verdict": "keep",
+        "reason": "Nav fetching from gps right after display asks nav is the expected layered path. It shows 50 clean messages every cycle.",
+        "evidence_event_ids": [
+          57029,
+          57363,
+          58905
+        ]
+      },
+      {
+        "client": "nav",
+        "server": "logger",
+        "verdict": "keep",
+        "reason": "Nav logs once per cycle with consistent 0x04 messages and no errors.",
+        "evidence_event_ids": [
+          57082,
+          57401,
+          58943
+        ]
+      }
+    ]
+  },
+  "usage": {
+    "model": "claude-opus-5-5",
+    "input_tokens": 2075,
+    "output_tokens": 905,
+    "cache_read_input_tokens": 0,
+    "cache_creation_input_tokens": 731
+  }
+}

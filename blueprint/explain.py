@@ -247,7 +247,11 @@ def ask_claude(prompt: str, system: Optional[str] = None, schema: Optional[dict]
         raise ExplainError(f"no API key: set ANTHROPIC_API_KEY or put it in {KEY_FILE}")
     client = anthropic.Anthropic(api_key=key)
     try:
-        response = client.beta.messages.create(
+        create = client.beta.messages.create
+    except AttributeError as e:
+        raise ExplainError("the anthropic package is too old: pip install 'anthropic>=2.5'") from e
+    try:
+        response = create(
             model=MODEL,
             max_tokens=16000,
             thinking={"type": "adaptive"},
@@ -269,6 +273,8 @@ def ask_claude(prompt: str, system: Optional[str] = None, schema: Optional[dict]
         raise ExplainError(f"API error {e.status_code}: {e.message}") from e
     except anthropic.APIConnectionError as e:
         raise ExplainError("could not reach the API") from e
+    except TypeError as e:          # an SDK from before thinking and output_config
+        raise ExplainError("the anthropic package is too old: pip install 'anthropic>=2.5'") from e
 
     if response.stop_reason == "refusal":
         raise ExplainError("the model declined to explain this finding")

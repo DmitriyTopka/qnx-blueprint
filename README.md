@@ -106,14 +106,21 @@ design.
 `--review` asks Claude to read the draft with you. For every edge it gets
 the message count, the first sends and what they carried, who else talks to
 the same server, and the source you pass with `--source`, and it marks the
-edges worth a question as comments in the draft. The format, on the backdoor
-trace (the reason is whatever Claude writes):
+edges worth a question as comments in the draft. On the backdoor trace, with
+no source passed, it marked one edge of six:
 
 ```
 allow:
-  # review (SUSPICIOUS): <Claude's reason>. Events 57138.
+  - display -> camera             # 50 messages
+  # review (SUSPICIOUS): Display reads gps directly, bypassing nav, which already queries gps every cycle. Display sends the same 0x01 request as nav, a few tenths of a millisecond after nav's query; confirm this direct path was designed and is not a leftover shortcut. Events 57138, 57457, 58999, 57029, 57363, 58905.
   - display -> gps                # 50 messages
+  - display -> logger             # 50 messages
 ```
+
+That answer cost about 0.03 USD (2,075 input and 905 output tokens) and is
+cached in `demo/cockpit/explanations`, so
+`blueprint init demo/cockpit/traces/backdoor.kev --system cockpit --review --offline --cache demo/cockpit/explanations`
+prints it again without a key. It needs `pip install 'qnx-blueprint[explain]'`.
 
 Nothing is removed. An edge Claude names that is not in the draft, and an
 event id it was not given, are dropped; a mark with no evidence left says

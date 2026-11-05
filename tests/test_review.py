@@ -55,3 +55,19 @@ class ReviewTest(unittest.TestCase):
 
 if __name__ == "__main__":
     unittest.main()
+
+
+class RecordedReviewTest(unittest.TestCase):
+    """The review Claude actually wrote for the backdoor trace, served from the cache."""
+
+    def test_cached_review_flags_only_the_backdoor(self):
+        trace = kev.read(os.path.join(COCKPIT, "traces", "backdoor.kev"))
+        model = ipc.build(trace)
+        processes, _ = init_contract.select(model)
+        draft = init_contract.draft(trace, model, processes, "backdoor.kev", "cockpit")
+        text, marks = review.review(trace, model, processes, draft, {},
+                                    os.path.join(COCKPIT, "explanations"), offline=True)
+        flagged = sorted(k for k, m in marks.items() if m["verdict"] != "keep")
+        self.assertEqual(flagged, [("display", "gps")])
+        self.assertTrue(marks[("display", "gps")]["verified"])
+        self.assertEqual(len(marks), 6)
