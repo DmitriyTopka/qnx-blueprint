@@ -80,6 +80,7 @@ def run(trace: kev.Trace, contract: contract_mod.Contract,
     findings += cycle_findings
     findings += check_stuck_replies(ctx, cycles)
     findings += check_reply_budgets(ctx)
+    findings += check_cycles(ctx)
     findings += check_isolation(ctx)
     findings += check_priority_inversion(ctx)
     findings += check_traffic(ctx, findings)
@@ -306,6 +307,64 @@ def check_reply_budgets(ctx: Context) -> List[Finding]:
     return out
 
 
+def check_cycles(ctx: Context) -> List[Finding]:
+    """A real-time loop misses its period.
+
+    `cycle_ms: {display -> nav: 100}` says display must get an answer from nav
+    at least every 100 ms. The gaps are measured between consecutive replies
+    and, while the client is still alive, from the last reply to the end of
+    the trace: a loop that stopped is the worst overrun of all. The overrun
+    is explained with the breakdown of the reply that closed the gap, or of
+    the message still open at the end.
+    """
+    out = []
+    pids_by_name: Dict[str, List[int]] = {}
+    for pid, name in ctx.model.names.items():
+        pids_by_name.setdefault(name, []).append(pid)
+    for (client, server), period in sorted(ctx.contract.cycle_ms.items()):
+        cpids, spids = pids_by_name.get(client, []), pids_by_name.get(server, [])
+        txs = sorted((tx for tx in ctx.model.transactions
+                      if tx.client_pid in cpids and tx.server_pid in spids and tx.t_reply is not None
+                      and tx.status == "replied"), key=lambda tx: tx.t_reply)
+        if not txs:
+            continue            # no-traffic and the other checks speak for a loop that never ran
+        misses: List[Tuple[float, Optional[ipc.Transaction], Optional[ipc.Transaction]]] = []
+        for prev, tx in zip(txs, txs[1:]):
+            gap = ctx.ms(tx.t_reply - prev.t_reply)
+            if gap > period:
+                misses.append((gap, prev, tx))
+        last = txs[-1]
+        loop_thread = (last.client_pid, last.client_tid)
+        alive = last.client_pid not in ctx.model.deaths and ctx.model.thread_state.get(loop_thread) not in (
+            ipc.STATE_DEAD, ipc.STATE_DESTROY, None)
+        tail = ctx.ms(ctx.t_end - last.t_reply)
+        if alive and tail > period:
+            misses.append((tail, last, None))
+        if not misses:
+            continue
+        misses.sort(key=lambda m: -m[0])
+        worst, prev, closing = misses[0]
+        stopped = closing is None
+        data = {"period_ms": period, "misses": len(misses), "cycles": len(txs),
+                "worst_gap_ms": round(worst, 1), "stopped": stopped}
+        events = [prev.reply_event] if prev.reply_event is not None else []
+        t_stop = closing.t_reply if closing is not None else ctx.t_end
+        parts = walk(ctx, (prev.client_pid, prev.client_tid), prev.t_reply, t_stop, "")
+        data["breakdown"], data["worst_ms"] = parts, round(worst, 1)
+        data["where"] = f"in the longest gap ({worst:.1f} ms) {client} spent: {describe(parts)}"
+        if closing is not None and closing.reply_event is not None:
+            events.append(closing.reply_event)
+        what = "stopped: no answer for the last " if stopped else "missed its period: worst gap "
+        out.append(Finding(
+            "cycle-overrun", ERROR,
+            f"{client} -> {server} cycle {what}{worst:.0f} ms against {period:g} ms",
+            f"{client} must get an answer from {server} at least every {period:g} ms. "
+            f"{len(misses)} gap(s) in {len(txs)} replies were longer; the worst was {worst:.1f} ms."
+            + (f" The loop was still waiting when the trace ended." if stopped else ""),
+            [client, server], events, data))
+    return out
+
+
 def breakdown(ctx: Context, tx: ipc.Transaction, depth: int = 1) -> List[dict]:
     """Split the time of one answered message into where it went.
 
@@ -316,9 +375,21 @@ def breakdown(ctx: Context, tx: ipc.Transaction, depth: int = 1) -> List[dict]:
     in its own call to another server (which one), sleeping, or in another
     blocked state. The parts add up to the whole reply time, largest first.
     """
+    if tx.server_tid is None or tx.t_receive is None or tx.t_reply is None:
+        return []
+    return walk(ctx, (tx.server_pid, tx.server_tid), tx.t_send, tx.t_reply, "server", tx, depth)
+
+
+def walk(ctx: Context, key: Tuple[int, int], t0: int, t1: int, role: str,
+         queued: Optional[ipc.Transaction] = None, depth: int = 1) -> List[dict]:
+    """Where one thread's time went between t0 and t1, from its state changes.
+
+    `queued` is a message the thread had not received yet at t0: until its
+    receive, time the thread spent on anything but being preempted counts as
+    the message waiting in the queue.
+    """
     parts: Dict[str, dict] = {}
     culprits: Dict[str, Dict[str, List[Tuple[int, int]]]] = {}
-
     inner_of: Dict[str, ipc.Transaction] = {}
 
     def add(what: str, cycles: int, kind: str, event: Optional[int] = None) -> None:
@@ -329,63 +400,59 @@ def breakdown(ctx: Context, tx: ipc.Transaction, depth: int = 1) -> List[dict]:
         if event is not None and len(p["events"]) < 3:
             p["events"].append(event)
 
-    if tx.server_tid is None or tx.t_receive is None or tx.t_reply is None:
-        return []
-    key = (tx.server_pid, tx.server_tid)
     line = [(t, st) for t, pid, tid, st in ctx.model.states if (pid, tid) == key]
-    state = ipc.STATE_RECEIVE
+    state = ipc.STATE_RECEIVE if queued is not None else ipc.STATE_RUNNING
     for t, st in line:
-        if t > tx.t_send:
+        if t > t0:
             break
         state = st
-    marks = [(tx.t_send, state)] + [(t, st) for t, st in line if tx.t_send < t < tx.t_reply]
-    if tx.t_receive not in [t for t, _ in marks]:
-        marks.append((tx.t_receive, None))     # split at the receive
+    marks = [(t0, state)] + [(t, st) for t, st in line if t0 < t < t1]
+    t_recv = queued.t_receive if queued is not None else t0
+    if queued is not None and t_recv not in [t for t, _ in marks]:
+        marks.append((t_recv, None))     # split at the receive
         marks.sort(key=lambda m: m[0])
     segments = _running_segments(ctx.model, ctx.t_end) if ctx.model.sched else []
     others = [o for o in ctx.model.transactions
-              if o is not tx and o.server_pid == tx.server_pid and o.t_receive is not None
-              and o.t_receive < tx.t_receive and (o.t_reply or ctx.t_end) > tx.t_send]
-    nested = [o for o in ctx.model.transactions
-              if (o.client_pid, o.client_tid) == key and o.t_send < tx.t_reply
-              and (o.t_reply or ctx.t_end) > tx.t_receive]
+              if queued is not None and o is not queued and o.server_pid == key[0]
+              and o.t_receive is not None and o.t_receive < t_recv and (o.t_reply or ctx.t_end) > t0]
+    calls = [o for o in ctx.model.transactions
+             if (o.client_pid, o.client_tid) == key and o.t_send < t1 and (o.t_reply or ctx.t_end) > t0]
     last = state
     for i, (t, st) in enumerate(marks):
         st = last if st is None else st
         last = st
-        t_next = marks[i + 1][0] if i + 1 < len(marks) else tx.t_reply
+        t_next = marks[i + 1][0] if i + 1 < len(marks) else t1
         span = t_next - t
-        before = t < tx.t_receive
         if st == ipc.STATE_READY:
-            add("server preempted", span, "preempted")
-            who = culprits.setdefault("server preempted", {})
+            what = (f"{role} preempted").strip()
+            add(what, span, "preempted")
+            who = culprits.setdefault(what, {})
             for s0, s1, pid, tid, prio, _ev in segments:
                 lo, hi = max(s0, t), min(s1, t_next)
                 if hi > lo and (pid, tid) != key and prio > 0:     # priority 0: the idle thread
-                    label = f"{ctx.model.name(pid)} at priority {prio}"
-                    who.setdefault(label, []).append((lo, hi))
-        elif before:
+                    who.setdefault(f"{ctx.model.name(pid)} at priority {prio}", []).append((lo, hi))
+        elif t < t_recv:
             busy = [o for o in others if o.t_receive <= t_next and (o.t_reply or ctx.t_end) >= t]
             if busy:
                 names = ", ".join(sorted({ctx.model.name(o.client_pid) for o in busy}))
                 add(f"queued behind {names}", span, "queued", busy[0].receive_event)
             else:
-                add("queued, server busy elsewhere", span, "queued", tx.send_event)
+                add("queued, server busy elsewhere", span, "queued", queued.send_event)
         elif st == ipc.STATE_RUNNING:
-            add("server running", span, "running")
+            add((f"{role} running").strip(), span, "running")
         elif st in (ipc.STATE_SEND, ipc.STATE_REPLY):
-            inner = next((o for o in nested if o.t_send <= t + 1 and (o.t_reply or ctx.t_end) >= t), None)
+            inner = next((o for o in calls if o.t_send <= t + 1 and (o.t_reply or ctx.t_end) >= t), None)
             target = ctx.model.name(inner.server_pid) if inner else "another server"
-            what = f"server waiting on {target}"
+            what = (f"{role} waiting on {target}").strip()
             add(what, span, "nested", inner.send_event if inner else None)
             if inner is not None and inner.t_reply is not None:
                 prev = inner_of.get(what)
                 if prev is None or inner.t_reply - inner.t_send > prev.t_reply - prev.t_send:
                     inner_of[what] = inner
         elif st == 12:
-            add("server sleeping (NANOSLEEP)", span, "sleep")
+            add((f"{role} sleeping (NANOSLEEP)").strip(), span, "sleep")
         else:
-            add(f"server blocked ({ipc.STATE_NAMES.get(st, st)})", span, "blocked")
+            add((f"{role} blocked ({ipc.STATE_NAMES.get(st, st)})").strip(), span, "blocked")
     out = []
     for p in sorted(parts.values(), key=lambda p: -p["cycles"]):
         p["ms"] = round(ctx.ms(p.pop("cycles")), 3)

@@ -1,0 +1,32 @@
+# Architecture contract for the cockpit demo, with real-time cycles.
+system: cockpit
+processes: [gps, nav, camera, logger, display]
+
+# Who may send messages to whom. Anything else between these processes fails the build.
+allow:
+  - display -> nav
+  - display -> camera
+  - display -> logger
+  - nav -> gps
+  - nav -> logger
+
+# How long a server may keep its client waiting. Measured on the trace clock;
+# under QEMU emulation times are inflated, so keep budgets generous.
+reply_budget_ms:
+  nav: 50
+  default: 20
+
+# The camera is allowed to fail. When it dies or hangs, the display must keep
+# drawing (at least 3 more completed messages to its other servers).
+isolation:
+  camera:
+    must_survive: [display]
+    min_progress: 3
+priority_inversion_ms: 2
+
+# Real-time loops, from the client's side. display draws a frame about every
+# 55 ms and needs a route from nav for each one, so 100 ms between answers is
+# a missed frame. A separate file from blueprint.yaml, so the cached Claude
+# explanations for the demo stay valid.
+cycle_ms:
+  display -> nav: 100

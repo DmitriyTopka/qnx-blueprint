@@ -17,6 +17,8 @@ A contract is a small YAML file, for example:
         min_progress: 3                 # completed messages after the fault
     priority_inversion_ms: 2    # experimental: a waiting client may lose at most
                                 # this much time to lower priority work
+    cycle_ms:                   # real-time loops, from the client's side:
+      display -> nav: 100       # display gets an answer from nav at least every 100 ms
 
 Only the processes listed under `processes` are checked; messages to system
 servers (procnto, pipe, devb-*) are outside the contract.
@@ -31,7 +33,8 @@ from typing import Dict, List, Optional, Set, Tuple
 import yaml
 
 ARROW = re.compile(r"[ \t]*([\w.-]+)[ \t]*->[ \t]*([\w.-]+)[ \t]*")
-TOP_KEYS = {"system", "processes", "allow", "reply_budget_ms", "isolation", "priority_inversion_ms"}
+TOP_KEYS = {"system", "processes", "allow", "reply_budget_ms", "isolation", "priority_inversion_ms",
+            "cycle_ms"}
 ISOLATION_KEYS = {"must_survive", "min_progress"}
 
 
@@ -55,6 +58,7 @@ class Contract:
     isolation: Dict[str, Isolation] = field(default_factory=dict)
     source: str = ""
     priority_inversion_ms: Optional[float] = None   # None: check is off
+    cycle_ms: Dict[Tuple[str, str], float] = field(default_factory=dict)
 
     def budget_for(self, server: str) -> float | None:
         if server in self.reply_budget_ms:
@@ -124,5 +128,19 @@ def parse(doc: dict) -> Contract:
             raise ContractError("priority_inversion_ms: expected a number") from None
         if inversion < 0:
             raise ContractError("priority_inversion_ms: must not be negative")
+    cycles: Dict[Tuple[str, str], float] = {}
+    for item, value in (doc.get("cycle_ms") or {}).items():
+        m = ARROW.fullmatch(str(item))
+        if not m:
+            raise ContractError(f"cycle_ms: expected 'client -> server', got {item!r}")
+        client, server = m.groups()
+        if (client, server) not in allow:
+            raise ContractError(f"cycle_ms: {client} -> {server} is not an allowed edge")
+        try:
+            cycles[(client, server)] = float(value)
+        except (TypeError, ValueError):
+            raise ContractError(f"cycle_ms.{item}: expected a number") from None
+        if cycles[(client, server)] <= 0:
+            raise ContractError(f"cycle_ms.{item}: must be positive")
     return Contract(str(doc.get("system", "")), list(processes), allow, budgets, isolation,
-                    priority_inversion_ms=inversion)
+                    priority_inversion_ms=inversion, cycle_ms=cycles)
