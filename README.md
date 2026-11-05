@@ -81,7 +81,13 @@ isolation:                  # when camera dies or hangs, display keeps working
     min_progress: 3
 priority_inversion_ms: 2    # experimental: time a waiting client may lose
                             # to lower priority work
+cycle_ms:                   # real-time loops, from the client's side:
+  display -> nav: 100       # display needs a route from nav at least every 100 ms
 ```
+
+`reply_budget_ms` is the server's promise, `cycle_ms` the client's deadline:
+display draws a frame about every 55 ms and needs nav's answer for each one.
+The demo's `realtime.yaml` is `blueprint.yaml` plus that line.
 
 To start from a system that already runs, record a trace and let Blueprint
 write the first draft:
@@ -97,6 +103,22 @@ times the slowest reply in that trace. A draft taken from a trace with a
 backdoor contains the backdoor, so read it and delete what you did not
 design.
 
+`--review` asks Claude to read the draft with you. For every edge it gets
+the message count, the first sends and what they carried, who else talks to
+the same server, and the source you pass with `--source`, and it marks the
+edges worth a question as comments in the draft. The format, on the backdoor
+trace (the reason is whatever Claude writes):
+
+```
+allow:
+  # review (SUSPICIOUS): <Claude's reason>. Events 57138.
+  - display -> gps                # 50 messages
+```
+
+Nothing is removed. An edge Claude names that is not in the draft, and an
+event id it was not given, are dropped; a mark with no evidence left says
+unverified. Reviews are cached like explanations.
+
 ## Checks
 
 | Check | Fails when |
@@ -105,6 +127,8 @@ design.
 | `wait-cycle` | threads end the trace waiting on each other in a loop (deadlock) |
 | `stuck-reply` | a server took a message and never replied |
 | `reply-budget` | a server replied, but slower than its budget |
+| `cycle-overrun` | a client went longer than its `cycle_ms` without an answer, or its loop stopped |
+| `kernel-denied` | the kernel refused a connection with EPERM: a security policy at work |
 | `isolation` | a process died or stopped answering and took a protected process down with it |
 | `no-traffic` | the trace shows no answered message at all, so it proves nothing |
 | `trace-loss` | kernel buffers are missing from the trace (a gap in the per-CPU buffer sequence), so no verdict on it can be trusted |
@@ -112,6 +136,24 @@ design.
 
 Every finding lists the trace events it is based on. Exit code 0 means pass,
 1 means the contract is violated, 2 means bad input.
+
+### Where the time went
+
+A slow reply or a missed cycle comes with a breakdown of its worst case,
+read from the thread states in the trace. The parts add up to the whole:
+
+```
+FAIL  [reply-budget] logger answers display too slowly
+      15 of 31 replies from logger to display took longer than 20 ms; worst 52.6 ms. ...
+      where: worst 52.6 ms: server preempted 50.4 ms (mostly media at priority 20, 50.3 ms), server running 2.0 ms, ...
+FAIL  [cycle-overrun] display -> nav cycle missed its period: worst gap 114 ms against 100 ms
+      where: in the longest gap (113.8 ms) display spent: sleeping (NANOSLEEP) 55.3 ms,
+      waiting on logger 48.5 ms (there: server preempted 46.6 ms (mostly media at priority 20, 45.1 ms)), ...
+```
+
+Queued behind another client, preempted (by which thread, at what priority,
+wall time), running, sleeping, or waiting on its own call to another server,
+followed one level into that server. The HTML report draws it as a bar.
 
 ## Record on your target, with faults
 
@@ -198,6 +240,20 @@ secure mode with a policy that matches the contract, the backdoor build fails in
 `open()` on the gps resource manager. How the demo
 policies were made is in [demo/cockpit/secpol](demo/cockpit/secpol/README.md).
 
+The refusal is in the trace too. A `ConnectAttach` the policy denies exits
+with `ret_val:-1, errno:1`, and a trace recorded on the secure image fails with
+
+```
+FAIL  [kernel-denied] the kernel refused display's connection to gps, which the contract forbids
+      ConnectAttach from display to gps failed 140 time(s) with EPERM: the security policy
+      blocked the path the contract leaves out. The build still tries it, ...
+```
+
+A refused edge that the contract allows means the policy and the contract
+disagree, or the process was started without its type. The secure-mode traces
+are in `tests/data/secure/`, and the serial logs and sessions of both secure
+images in [demo/cockpit/secpol/evidence](demo/cockpit/secpol/evidence/README.md).
+
 ## Explanations by Claude
 
 ```
@@ -213,10 +269,24 @@ evidence is marked unverified. Answers are cached next to the contract, so the
 demo and CI runs work offline. One explanation costs about 0.06 USD with
 `claude-opus-5-5`.
 
+## For coding assistants (MCP)
+
+```
+python3 -m pip install "qnx-blueprint[mcp] @ git+https://github.com/DmitriyTopka/qnx-blueprint"
+blueprint mcp
+```
+
+`blueprint mcp` is an MCP server on stdio with five tools: `check_trace`,
+`draft_contract`, `write_policy`, `check_policy` and `list_demo_traces`. Add it
+to your assistant's MCP configuration (command `blueprint`, argument `mcp`)
+and it can check a trace, read where the time went and propose a fix in one
+conversation. The tools read local files only; recording a trace over ssh
+stays a command you run yourself.
+
 ## In CI
 
 ```yaml
-- uses: DmitriyTopka/qnx-blueprint@v0.1.1
+- uses: DmitriyTopka/qnx-blueprint@v0.2.0
   with:
     trace: traces/nightly.kev
     contract: blueprint.yaml

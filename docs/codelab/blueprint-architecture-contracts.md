@@ -349,7 +349,7 @@ and add one step to your workflow:
 
 ```yaml
 - uses: actions/checkout@v7
-- uses: DmitriyTopka/qnx-blueprint@v0.1.1
+- uses: DmitriyTopka/qnx-blueprint@v0.2.0
   with:
     trace: traces/nightly.kev
     contract: blueprint.yaml
