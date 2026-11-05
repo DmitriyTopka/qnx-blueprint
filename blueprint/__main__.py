@@ -9,7 +9,7 @@ import sys
 
 import os
 
-from . import checks, contract, explain, init_contract, ipc, junit, kev, perfetto, record, report, secpol, snapshot, topology
+from . import api, checks, contract, explain, init_contract, ipc, junit, kev, perfetto, record, report, secpol, snapshot, topology
 
 
 def cmd_pairs(args: argparse.Namespace) -> int:
@@ -48,36 +48,14 @@ def cmd_topology(args: argparse.Namespace) -> int:
     return 0
 
 
-def _stem(trace_path: str) -> str:
-    """run.kev or run.kev.gz -> run"""
-    for ext in (".kev.gz", ".kev"):
-        if trace_path.endswith(ext):
-            return trace_path[: -len(ext)]
-    return os.path.splitext(trace_path)[0]
-
-
 def cmd_check(args: argparse.Namespace) -> int:
     try:
-        con = contract.load(args.contract)
-        trace = kev.read(args.trace)
-    except (OSError, contract.ContractError, kev.KevFormatError) as e:
+        trace, con, findings, topo, snap_path = api.run(args.trace, args.contract, args.snapshot,
+                                                        args.secpol, _types(args) if args.secpol else None)
+    except (OSError, contract.ContractError, kev.KevFormatError, secpol.PolicyError) as e:
         print(f"blueprint: {e}", file=sys.stderr)
         return 2
-    snap = None
-    snap_path = args.snapshot or _stem(args.trace) + ".pidin"
-    if os.path.exists(snap_path):
-        snap = snapshot.load(snap_path)
-    elif args.snapshot:
-        print(f"blueprint: snapshot {args.snapshot} not found", file=sys.stderr)
-        return 2
-    findings, topo = checks.run(trace, con, snap)
-    if args.secpol:
-        try:
-            with open(args.secpol, encoding="utf-8") as f:
-                findings += secpol.compare(con, secpol.parse(f.read()), args.secpol, _types(args))
-        except (OSError, secpol.PolicyError) as e:
-            print(f"blueprint: {e}", file=sys.stderr)
-            return 2
+    snap = snap_path
     errors = [f for f in findings if f.severity == checks.ERROR]
     explanations = {}
     if args.explain:
@@ -97,14 +75,7 @@ def cmd_check(args: argparse.Namespace) -> int:
                                                   sources, cache, offline=args.offline)
             except explain.ExplainError as e:
                 print(f"blueprint: no explanation for '{finding.title}': {e}", file=sys.stderr)
-    result = {
-        "system": con.system, "trace": args.trace, "contract": args.contract,
-        "result": "fail" if errors else "pass",
-        "summary": {"errors": len(errors), "warnings": len(findings) - len(errors)},
-        "findings": [dict(f.to_json(), explanation=explanations[i].to_json() if i in explanations else None)
-                     for i, f in enumerate(findings)],
-        "topology": topo.to_json(),
-    }
+    result = api.result(con, args.trace, args.contract, findings, topo, explanations)
     if args.json:
         with open(args.json, "w", encoding="utf-8") as f:
             json.dump(result, f, indent=2)
@@ -164,6 +135,20 @@ def cmd_init(args: argparse.Namespace) -> int:
     except contract.ContractError as e:
         print(f"blueprint: internal error, the draft is not a valid contract: {e}", file=sys.stderr)
         return 2
+    if args.review:
+        from . import review
+        sources = {}
+        for path in args.source:
+            with open(path, encoding="utf-8") as f:
+                sources[path] = f.read()
+        cache = args.cache or os.path.join(os.path.dirname(os.path.abspath(args.trace)), "explanations")
+        try:
+            text, marks = review.review(trace, model, processes, text, sources, cache, offline=args.offline)
+        except explain.ExplainError as e:
+            print(f"blueprint: no review: {e}", file=sys.stderr)
+            return 2
+        flagged = [k for k, m in marks.items() if m["verdict"] != "keep"]
+        print(f"review: {len(flagged)} of {len(marks)} edges marked for a question", file=sys.stderr)
     if args.out:
         if os.path.exists(args.out) and not args.force:
             print(f"blueprint: {args.out} exists; pass --force to overwrite it", file=sys.stderr)
@@ -289,6 +274,11 @@ def _markdown(result: dict, explanations: dict) -> str:
 DEMO_DEFAULT = os.path.join("demo", "cockpit", "scenarios.yaml")
 
 
+def cmd_mcp(args: argparse.Namespace) -> int:
+    from . import mcp_server
+    return mcp_server.main()
+
+
 def cmd_demo(args: argparse.Namespace) -> int:
     import yaml
 
@@ -318,7 +308,7 @@ def cmd_demo(args: argparse.Namespace) -> int:
     for sc in spec["scenarios"]:
         trace_path = os.path.join(base, "traces", sc["name"] + ".kev")
         trace = kev.read(trace_path)
-        snap_path = _stem(trace_path) + ".pidin"
+        snap_path = api.stem(trace_path) + ".pidin"
         snap = snapshot.load(snap_path) if os.path.exists(snap_path) else None
         findings, topo = checks.run(trace, con, snap)
         errors = [f for f in findings if f.severity == checks.ERROR]
@@ -390,6 +380,11 @@ def build_parser() -> argparse.ArgumentParser:
     p.add_argument("--system", default="my-system", help="system name for the contract")
     p.add_argument("--out", "-o", default="", help="write the draft here instead of stdout")
     p.add_argument("--force", action="store_true", help="overwrite --out if it exists")
+    p.add_argument("--review", action="store_true", help="ask Claude which edges of the draft look "
+                   "undesigned; marks go into the draft as comments (cached, needs an API key the first time)")
+    p.add_argument("--source", action="append", default=[], help="--review: source file to show Claude (repeatable)")
+    p.add_argument("--offline", action="store_true", help="--review: only use a cached review")
+    p.add_argument("--cache", default="", help="--review: cache directory (default: explanations/ next to the trace)")
     p.set_defaults(func=cmd_init)
     p = sub.add_parser("secpol", help="write QNX security policy channel rules from the contract, "
                        "or compare a policy with it")
@@ -420,6 +415,9 @@ def build_parser() -> argparse.ArgumentParser:
     p.add_argument("--html", default="", help="check: also write an HTML report")
     p.add_argument("--junit", default="", help="check: also write JUnit XML")
     p.set_defaults(func=cmd_record)
+    p = sub.add_parser("mcp", help="run Blueprint as an MCP server on stdio, for coding assistants "
+                       "(needs pip install 'qnx-blueprint[mcp]')")
+    p.set_defaults(func=cmd_mcp)
     p = sub.add_parser("demo", help="replay the recorded cockpit scenarios (no QNX target needed)")
     p.add_argument("--scenarios", default=DEMO_DEFAULT)
     p.add_argument("--out", default="out")

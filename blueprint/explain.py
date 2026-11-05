@@ -234,7 +234,10 @@ def _api_key() -> Optional[str]:
     return None
 
 
-def ask_claude(prompt: str) -> tuple[dict, dict]:
+def ask_claude(prompt: str, system: Optional[str] = None, schema: Optional[dict] = None) -> tuple[dict, dict]:
+    """One structured call; system and schema default to the explanation ones."""
+    system = SYSTEM_PROMPT if system is None else system
+    schema = SCHEMA if schema is None else schema
     try:
         import anthropic
     except ImportError as e:
@@ -249,11 +252,11 @@ def ask_claude(prompt: str) -> tuple[dict, dict]:
             max_tokens=16000,
             thinking={"type": "adaptive"},
             output_config={"effort": "medium",
-                           "format": {"type": "json_schema", "schema": SCHEMA}},
+                           "format": {"type": "json_schema", "schema": schema}},
             # If a safety classifier declines, the API retries on a fallback model.
             betas=["server-side-fallback-2026-07-01"],
             fallbacks="default",
-            system=[{"type": "text", "text": SYSTEM_PROMPT, "cache_control": {"type": "ephemeral"}}],
+            system=[{"type": "text", "text": system, "cache_control": {"type": "ephemeral"}}],
             messages=[{"role": "user", "content": prompt}],
         )
     except anthropic.AuthenticationError as e:

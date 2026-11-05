@@ -7,6 +7,10 @@ license = "Apache-2.0"
 requires-python = ">=3.10"
 dependencies = ["PyYAML>=6"]
 
+[project.optional-dependencies]
+explain = ["anthropic"]
+mcp = ["mcp>=2.3"]
+
 [project.scripts]
 blueprint = "blueprint.__main__:main"
 
