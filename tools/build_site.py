@@ -197,6 +197,7 @@ in CI, and turns the same file into a security policy the kernel enforces.</p>
  <div class=card><h3>After release: the kernel</h3><p>The same file becomes the channel rules of a QNX security
  policy. In secure mode a backdoor gets <code>Operation not permitted</code>.</p></div>
 </div>
+<p><a href='https://youtu.be/Z-WK1Dc1k-M'>Watch the 1:49 video</a> of all of it.</p>
 <h2>Try it</h2>
 <pre><code>git clone {REPO_URL}.git
 cd qnx-blueprint
@@ -214,6 +215,9 @@ between threads. The expected result of each was written down before the checks 
 <p>QNX 8.0 booted in fully secure mode, with a security policy that matches the contract (aarch64, recorded; x86_64 by hand,
 same answers):</p>
 <div class=tablewrap>{kernel}</div>
+<p>Serial logs of both secure boots, and checksums showing that the policy the kernel loaded
+(<code>/proc/boot/secpol.bin</code>) is the one compiled from this repository:
+<a href='{REPO_URL}/tree/main/demo/cockpit/secpol/evidence'>evidence</a>.</p>
 <h2>On a system we didn't write</h2>
 <p>A QNX image with only QNX's own services running: <code>blueprint init --all</code> maps eight message paths
 between the shell, procnto, devb-eide, io-sock, pipe and io-usb-otg, and the check passes

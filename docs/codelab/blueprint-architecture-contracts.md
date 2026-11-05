@@ -73,17 +73,23 @@ blueprint demo
 You should see fifteen rows and the last line
 `all scenarios behaved as expected`. Each row is a real trace recorded on
 QNX 8.0 in QEMU from the demo system in `demo/cockpit`: five processes called
-gps, nav, camera, logger and display.
+gps, nav, camera, logger and display. Nine of them break something on
+purpose:
 
 | Scenario | What was broken |
 |---|---|
 | `deadlock` | gps asks nav for a hint while nav waits on gps |
 | `backdoor` | display reads gps directly, bypassing nav |
 | `camera-hang` | the camera stops answering and the display freezes with it |
+| `camera-dies` | the camera is killed and the display treats the error as fatal |
 | `slow-reply` | nav answers in 200 ms against a 50 ms budget |
 | `deadlock-late` | the deadlock happened before the trace started |
+| `camera-hang-late` | the camera stopped answering before the trace started |
 | `prio-inversion` | logger keeps priority 10 on a fixed priority channel while display waits at 30 |
 | `resmgr-backdoor` | gps is a resource manager; display opens `/dev/cockpit/gps` itself |
+
+The other six pass: `ok`, `ok-late`, `resmgr-ok` and the fixed builds
+`camera-hang-fixed`, `camera-dies-fixed` and `prio-inversion-fixed`.
 
 Positive
 : The demo works offline. Explanations of the findings were generated once
@@ -298,6 +304,10 @@ A connection the policy does not allow fails in the kernel with EPERM, so
 `name_open()` returns -1 and `strerror(errno)` says "Operation not permitted".
 
 ### A fully secure image, step by step
+
+The serial logs, image options and ssh sessions of the two secure images
+this step was tested on are in
+[`demo/cockpit/secpol/evidence`](https://github.com/DmitriyTopka/qnx-blueprint/tree/main/demo/cockpit/secpol/evidence).
 
 This is how we booted the demo in `--secpol=secure` mode, where no process
 runs without a policy.
