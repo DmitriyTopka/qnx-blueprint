@@ -41,6 +41,10 @@ order of types in a rule, the md5 of your policy and how many refusals a
 trace catches. Each step says what must hold. Long tool outputs are
 shortened to the lines that matter.
 
+Positive
+: Want to see it first? [A recorded run of this whole codelab](https://youtu.be/OHoixOUmPH8)
+(6 minutes, QNX 8.0 in QEMU, real output; builds and boots are sped up).
+
 ---
 
 ## Prerequisites
