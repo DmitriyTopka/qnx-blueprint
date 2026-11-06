@@ -197,7 +197,7 @@ in CI, and turns the same file into a security policy the kernel enforces.</p>
  <div class=card><h3>After release: the kernel</h3><p>The same file becomes the channel rules of a QNX security
  policy. In secure mode a backdoor gets <code>Operation not permitted</code>.</p></div>
 </div>
-<p><a href='https://youtu.be/Z-WK1Dc1k-M'>Watch the 1:49 video</a> of all of it.</p>
+<p><a href='https://youtu.be/rqJFxPH5Bjs'>Watch the 1:49 video</a> of all of it.</p>
 <h2>Try it</h2>
 <pre><code>git clone {REPO_URL}.git
 cd qnx-blueprint
