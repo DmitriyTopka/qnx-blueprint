@@ -139,11 +139,7 @@ interactive session. The `#` lines below are typed in it:
 ```console
 ssh -p 2230 root@localhost
 # ls /dev/secpolgenerate
-control
-errors
-policy
-request
-unused
+control  errors  policy  request  unused
 ```
 
 `/dev/secpolgenerate` is the learner. `policy` is what it has learned so far.
@@ -172,6 +168,9 @@ display 04: route via pos 50.454 | frame 5
 # slay -Q -s KILL gps nav camera logger
 ```
 
+The shell also prints job lines such as `[1] 704534` when a server starts
+and `[4] + Killed ...` after `slay`. They are not shown here; ignore them.
+
 Do everything else the finished system will have to do, because anything not
 learned now is refused later. From the host, log in two more times and copy
 a file both ways:
@@ -182,10 +181,11 @@ echo hi > /tmp/up.txt && scp -P 2230 /tmp/up.txt root@localhost:/tmp/
 scp -P 2230 root@localhost:/tmp/up.txt /tmp/down.txt
 ```
 
-On the target, run `pidin` and `slay` once. Then look at what display
-learned:
+On the target, run `pidin` once (`slay` already ran above). Then look at
+what display learned:
 
 ```console
+# pidin
 # grep -A4 "^allow display_t self:ability" /dev/secpolgenerate/policy | grep channel_connect
     channel_connect:logger_t,camera_t,nav_t
 ```
@@ -302,19 +302,19 @@ mkqnximage --type=qemu --arch=x86_64 --secpol=secure --policy=$LAB/learned.secpo
 ```
 
 `secpolcompile` here is only a syntax check; `mkqnximage` compiles the
-policy into the image itself. Stop the learning image (`kill %1`) and boot
-the secure one, with port 2231 for ssh and 2232 for the debug sshd:
+policy into the image itself. Stop the learning image and boot the secure
+one, with port 2231 for ssh and 2232 for the debug sshd:
 
 ```console
-cd $LAB/sec
+cd $LAB/sec && kill %1
 qemu-system-x86_64 -m 1G -smp 2 -cpu max -display none -serial file:serial.log \
   -kernel output/ifs.bin -drive file=output/disk-qemu.vmdk,if=ide,id=drv0 \
   -netdev user,id=net0,hostfwd=tcp::2231-:22,hostfwd=tcp::2232-:2200 \
   -device virtio-net-pci,netdev=net0 &
 ```
 
-The normal ssh login works, because the learner saw it. Two things fail.
-Tracing:
+The normal ssh login works, because the learner saw it. The first login can
+take up to 20 seconds; wait for the prompt. Two things fail. Tracing:
 
 ```console
 # tracelogger -w -s 1 -f /tmp/t.kev
@@ -324,7 +324,10 @@ tracelogger: tracelog_start: Operation not permitted
 And the debug sshd: `ssh -p 2232 root@localhost` just disconnects, and
 `serial.log` shows why:
 
-```
+```console
+ssh -p 2232 root@localhost
+Connection closed by 127.0.0.1 port 2232
+grep initgroups $LAB/sec/serial.log
 initgroups: root: Operation not permitted
 ```
 
@@ -448,12 +451,13 @@ kernel call that returns -1 with errno 1, `EPERM`:
 104
 # traceprinter -f /tmp/backdoor.kev | grep -m1 "CONNECT_ATTACH.*errno:1"
 t:0x51f9c73a9 CPU:01 KER_EXIT        :CONNECT_ATTACH/39  ret_val:-1, errno:1
+fprintf() failed with 32 (Broken pipe)
 # slay -Q -s KILL gps nav camera logger
 ```
 
 The count depends on how many of display's retries the trace caught: the
 program tries `name_open()` 200 times, 20 ms apart. With the one-line start
-above we saw 182; with a trace started by hand a few seconds earlier, 104
+above we saw 182 and 193; with a trace started by hand a few seconds earlier, 104
 and 84. What must hold is that it is not zero. Copy the trace to
 the host and let Blueprint say who tried to reach whom:
 

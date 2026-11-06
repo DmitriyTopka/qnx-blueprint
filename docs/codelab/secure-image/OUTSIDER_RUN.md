@@ -58,3 +58,15 @@ poisons the learner until reboot and a reboot empties it.
     an interactive session.
 15. Blueprint outputs were shortened without saying so. Now the intro says
     long outputs are shortened.
+
+## Third run, recorded for the video
+
+On 6 November 2026 another agent run followed the codelab again, from an empty
+folder, and recorded every step as a terminal session for the demo video. All
+steps worked. It found six smaller gaps, now fixed in the text: `ls` prints
+the learner's files in columns, the shell prints job lines, `kill %1` before
+the first secure boot was only in the prose, `pidin` and the `serial.log`
+check had no exact command, `traceprinter | grep -m1` also prints a broken
+pipe line, and the first login to a secure image can take about 20 seconds.
+Its numbers: line 209 for the backdoor rule, 193 refusals in the trace, the
+same md5 on host and target.
