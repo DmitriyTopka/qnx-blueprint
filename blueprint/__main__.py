@@ -402,9 +402,11 @@ def build_parser() -> argparse.ArgumentParser:
     p.add_argument("host", help="ssh destination, e.g. root@192.168.1.20")
     p.add_argument("--out", "-o", default="run.kev", help="local trace file (.pidin and .inject.json go next to it)")
     p.add_argument("--duration", "-d", type=float, default=5.0, help="trace length in seconds (default 5)")
-    p.add_argument("--inject", action="append", default=[], metavar="NAME@SECONDS[:stop]",
+    p.add_argument("--inject", action="append", default=[], metavar="NAME[ARGS]@SECONDS[:stop]",
                    help="kill this process with SIGKILL this many seconds into the trace, or with "
-                        ":stop freeze it with SIGSTOP and continue it after the trace (repeatable)")
+                        ":stop freeze it with SIGSTOP and continue it after the trace (repeatable). "
+                        "NAME[ARGS] picks only instances whose command line contains ARGS, "
+                        "e.g. 'io-sock[prefix=/can]@2:stop'")
     p.add_argument("--start", default="", help="shell command that starts the system inside the trace "
                    "(default: attach to the system already running)")
     p.add_argument("--contract", "-c", default="", help="check the trace against this contract when done")

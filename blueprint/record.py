@@ -6,6 +6,7 @@ so any ssh command works, including one wrapped in `docker exec`.
 
     blueprint record root@target -c blueprint.yaml --inject camera@1.5 -o run.kev
     blueprint record root@target -c blueprint.yaml --inject qpp@1.5:stop -o hang.kev
+    blueprint record root@target -c blueprint.yaml --inject 'io-sock[prefix=/can]@2:stop'
 
 The trace starts first and the kills happen while it runs, so the death of each
 process is in the trace with everything that happened to its clients after it.
@@ -33,12 +34,18 @@ class Injection:
     process: str
     at: float  # seconds after the trace started
     action: str = "kill"   # kill: SIGKILL; stop: SIGSTOP, continued after the trace and pidin
+    match: str = ""        # NAME[TEXT]: only instances whose command line contains TEXT
 
     @staticmethod
     def parse(text: str) -> "Injection":
         name, sep, at = text.partition("@")
         if not name or not sep:
             raise RecordError(f"--inject wants NAME@SECONDS or NAME@SECONDS:stop, got {text!r}")
+        match = ""
+        if name.endswith("]") and "[" in name:
+            name, _, match = name[:-1].partition("[")
+            if not match or not all(c.isalnum() or c in "-_./=,:" for c in match):
+                raise RecordError(f"--inject {text!r}: {match!r} is not a plain command line fragment")
         at, _, action = at.partition(":")
         action = action or "kill"
         if action not in ("kill", "stop"):
@@ -51,7 +58,11 @@ class Injection:
             raise RecordError(f"--inject {text!r}: time must not be negative")
         if not all(c.isalnum() or c in "-_." for c in name):
             raise RecordError(f"--inject {text!r}: {name!r} is not a plain process name")
-        return Injection(name, value, action)
+        return Injection(name, value, action, match)
+
+    @property
+    def label(self) -> str:
+        return f"{self.process}[{self.match}]" if self.match else self.process
 
 
 def remote_script(duration: float, injections: list[Injection], start: str = "",
@@ -88,11 +99,18 @@ def remote_script(duration: float, injections: list[Injection], start: str = "",
             lines.append(f"sleep {wait:g}")
         t = max(t, inj.at)
         name = q(inj.process)
-        # slay exits with the number of processes it signalled, so 0 means
-        # nothing by that name was running.
         sig = "STOP" if inj.action == "stop" else "KILL"
-        lines.append(f"slay -Q -s {sig} {name} >/dev/null 2>&1; "
-                     f"echo \"inject {inj.process} $? $(date +%s) {inj.action}\"")
+        if inj.match:
+            # Two instances of one binary (a second io-sock) share the name:
+            # pick by command line, so the other one (and ssh) is untouched.
+            lines.append(_by_args(inj, "BPPIDS"))
+            lines.append(f"N=0; for p in $BPPIDS; do kill -s {sig} $p && N=$((N+1)); done; "
+                         f"echo \"inject {inj.process} $N $(date +%s) {inj.action}\"")
+        else:
+            # slay exits with the number of processes it signalled, so 0 means
+            # nothing by that name was running.
+            lines.append(f"slay -Q -s {sig} {name} >/dev/null 2>&1; "
+                         f"echo \"inject {inj.process} $? $(date +%s) {inj.action}\"")
     lines += [
         "wait $TL",
         # Threads that were blocked before the trace started emit no events;
@@ -101,12 +119,23 @@ def remote_script(duration: float, injections: list[Injection], start: str = "",
     ]
     # A stopped process is continued only after pidin has seen it STOPPED.
     for inj in injections:
-        if inj.action == "stop":
+        if inj.action == "stop" and inj.match:
+            lines.append(_by_args(inj, "BPPIDS"))
+            lines.append("for p in $BPPIDS; do kill -s CONT $p; done")
+        elif inj.action == "stop":
             lines.append(f"slay -Q -s CONT {q(inj.process)} >/dev/null 2>&1")
     lines += [
         "ls -l $D/run.kev >&2",
     ]
     return "\n".join(lines) + "\n"
+
+
+def _by_args(inj: Injection, var: str) -> str:
+    """sh that sets $var to the pids of `inj.process` whose command line has `inj.match`.
+    `pidin -f anA` prints pid, name and arguments on one line."""
+    prog = ("{n=$2; sub(/.*\\//, \"\", n)} n == name && index($0, text) {print $1}")
+    return (f"{var}=$(pidin -f anA | awk -v name={shlex.quote(inj.process)} "
+            f"-v text={shlex.quote(inj.match)} {shlex.quote(prog)})")
 
 
 def _ssh(ssh: str, host: str) -> list[str]:
@@ -147,7 +176,8 @@ def record(host: str, out: str, duration: float, injections: list[Injection],
             f.write(got.stdout)
     run(base + ["rm", "-rf", REMOTE_DIR], capture_output=True, timeout=30)
     result = {"host": host, "duration_s": duration, "start": start or None,
-              "injections": [{"process": i.process, "at_s": i.at, "action": i.action} for i in injections],
+              "injections": [{"process": i.process, "at_s": i.at, "action": i.action,
+                              **({"match": i.match} if i.match else {})} for i in injections],
               "log": log, "trace": stem + ".kev", "snapshot": stem + ".pidin"}
     with open(stem + ".inject.json", "w", encoding="utf-8") as f:
         json.dump(result, f, indent=2)

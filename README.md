@@ -141,6 +141,12 @@ unverified. Reviews are cached like explanations.
 | `trace-loss` | kernel buffers are missing from the trace (a gap in the per-CPU buffer sequence), so no verdict on it can be trusted |
 | `priority-inversion` | a client waits on a lower priority server while threads with a priority in between use the CPU (experimental, on when the contract sets `priority_inversion_ms`) |
 
+A `read()` that waits in the server for data (a socket, a device, a pipe) is
+the client waiting for input, not the server's latency: when the thread that
+took it spent the wait parked (CONDVAR, SEM, back in MsgReceive), it counts
+neither against `reply_budget_ms` nor as a stuck reply. If the data must come
+in time, give the client a `cycle_ms`.
+
 Every finding lists the trace events it is based on. Exit code 0 means pass,
 1 means the contract is violated, 2 means bad input.
 
@@ -177,7 +183,9 @@ This starts a wide trace on the running system, kills `camera` with SIGKILL
 the target: it only needs `tracelogger`, `pidin`, `slay` and `sleep` from a
 stock QNX 8.0 image. `--inject` takes any process from the contract and can be
 repeated; `--inject qpp@1.5:stop` freezes it with SIGSTOP instead of killing it,
-and continues it after `pidin` has seen it stopped. `--start "..."` launches the system inside the trace instead of
+and continues it after `pidin` has seen it stopped. When two instances of one
+binary run, `--inject 'io-sock[prefix=/can]@2:stop'` picks the one whose
+command line contains `prefix=/can` and leaves the other alone. `--start "..."` launches the system inside the trace instead of
 attaching to one that is already up, and `--ssh "..."` replaces the ssh command
 (for a jump host or a VM in a container). A kill that finds no such process is
 reported, so a test that never broke anything cannot pass by accident.
@@ -341,6 +349,13 @@ with its server killed. Blueprint names the stopped server and the client
 left REPLY-blocked on it, and the run found four weak spots in Blueprint
 itself, now fixed. See [demo/external/qpp/README.md](demo/external/qpp/README.md).
 
+`demo/external/socketcan` is BlackBerry's
+[SocketCAN for io-sock](https://github.com/qnx/socketcan) on a virtual CAN
+bus, with the CAN stack stopped and killed under its clients. Its blocking
+reads made Blueprint fail a healthy system; that and three more weak spots
+are fixed. The prebuilt module needed a small shim of ours to load, see
+[demo/external/socketcan/README.md](demo/external/socketcan/README.md).
+
 ## Is the parser right?
 
 Every trace in the repository was also printed with QNX's own `traceprinter`
@@ -362,6 +377,11 @@ trace.
   The parser keeps the whole trace in memory, so memory grows with the trace;
   a trace of a few hundred megabytes would need several gigabytes (an
   estimate, not measured). Record a few seconds around the behaviour you check.
+- A read that was already waiting when the trace started shows only in
+  `pidin`, without its message, so Blueprint cannot tell a reader waiting for
+  data from a stuck server and reports it. Start the system inside the trace
+  (`record --start`) when its clients block in `read()`.
+- Two instances of one binary (two io-sock) are one process in a contract.
 - Record with `tracelogger -w`. Without wide mode the trace still shows who
   sent to whom and who was blocked (on the healthy demo it gave the same five
   edges), but thread priorities and message contents are missing. Blueprint

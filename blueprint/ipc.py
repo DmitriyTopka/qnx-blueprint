@@ -133,6 +133,10 @@ class IpcModel:
     sched: List[Tuple[int, int, int, int, int, int, int]] = field(default_factory=list)
     thread_names: Dict[Tuple[int, int], str] = field(default_factory=dict)
     death_events: Dict[int, int] = field(default_factory=dict)  # pid -> event index
+    # pid -> when the process started to die: its first thread death after its
+    # last reply. PROCDESTROY comes at the end of the teardown, and under
+    # emulation clients are told the server is gone tens of ms before it.
+    dying: Dict[int, int] = field(default_factory=dict)
     # ConnectAttach calls the kernel refused: (time, pid, tid, server pid, chid, errno, event index).
     # Under a security policy, errno 1 (EPERM) is the policy saying no.
     refused: List[Tuple[int, int, int, int, int, int, int]] = field(default_factory=list)
@@ -274,5 +278,15 @@ def build(trace: kev.Trace) -> IpcModel:
                 else:
                     tx.status = "error"
 
+    last_reply: Dict[int, int] = {}
+    for tx in model.transactions:
+        if tx.reply_event is not None and tx.status == "replied" and tx.server_pid is not None:
+            last_reply[tx.server_pid] = max(last_reply.get(tx.server_pid, 0), tx.t_reply)
+    for t, pid, tid, state in model.states:
+        if (pid in model.deaths and pid not in model.dying and state in (STATE_DEAD, STATE_DESTROY)
+                and t > last_reply.get(pid, -1) and t <= model.deaths[pid]):
+            model.dying[pid] = t
+    for pid, t in model.deaths.items():
+        model.dying.setdefault(pid, t)
     return model
 

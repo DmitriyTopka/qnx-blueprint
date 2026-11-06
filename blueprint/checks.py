@@ -225,6 +225,9 @@ def check_stuck_replies(ctx: Context, cycles: List[List[str]]) -> List[Finding]:
             continue  # a slow server cut off by the end of the trace, not a stuck one
         server_blocked = any(o.process == w.server for o in ctx.topo.waiters)
         stopped = _stopped(ctx, w.server_pid, tx.server_tid if tx else None)
+        if not stopped and tx is not None and waits_for_data(ctx, tx):
+            continue  # a read parked in the server until data comes: cycle_ms checks that it comes
+        holder = _last_state(ctx, w.server_pid, tx.server_tid) if tx and tx.server_tid is not None else None
         # If the contract plans for this server failing, the hang itself is a
         # known failure mode; whether it hurt anyone is the isolation check's call.
         planned = w.server in ctx.contract.isolation
@@ -236,7 +239,12 @@ def check_stuck_replies(ctx: Context, cycles: List[List[str]]) -> List[Finding]:
             + f" (budget {budget if budget is not None else 'none'} ms). "
             + (stopped[0] if stopped else
                "The server is itself blocked." if server_blocked else
-               "The server is not blocked on anyone, so it is stuck in its own code.")
+               "The server is not blocked on anyone, so it is stuck in its own code."
+               if holder in (ipc.STATE_RUNNING, ipc.STATE_READY) else
+               f"Server thread {tx.server_tid}, which holds the message, is in "
+               f"{ipc.STATE_NAMES.get(holder, holder)} and not blocked on another server."
+               if holder is not None else
+               "The server is not blocked on another server; the trace does not show what it is doing.")
             + (" The contract plans for this server failing, see the isolation check." if planned else ""),
             [w.process, w.server],
             ([w.send_event] if w.send_event is not None else []) + ([stopped[1]] if stopped and stopped[1] is not None else []),
@@ -266,8 +274,16 @@ def _stopped(ctx: Context, server_pid: Optional[int], server_tid: Optional[int])
         t0 = ctx.trace.events[0].t_cycles if ctx.trace.events else t
         when = (f"was already STOPPED when the trace started" if ctx.ms(t - t0) < 1.0
                 else f"was STOPPED at {ctx.ms(t - t0):.0f} ms into the trace")
-        return (f"Server thread {tid} {when} (a signal such as SIGSTOP, or a debugger) and stayed "
-                f"stopped, so it cannot reply until it is continued.", idx)
+        if server_tid is None or tid == server_tid:
+            return (f"Server thread {tid} {when} (a signal such as SIGSTOP, or a debugger) and stayed "
+                    f"stopped, so it cannot reply until it is continued.", idx)
+        # A stop reaches a blocked thread only when it wakes, so the thread
+        # that holds this message may still show its blocked state.
+        held = last.get(server_tid)
+        held_state = ipc.STATE_NAMES.get(held[1], held[1]) if held else "an unknown state"
+        return (f"The server process is stopped: its thread {tid} {when} (a signal such as SIGSTOP, "
+                f"or a debugger). Thread {server_tid}, which holds this message, shows "
+                f"{held_state} and cannot reply until the process is continued.", idx)
     snap = ctx.snap
     if snap is not None:
         for th in getattr(snap, "threads", []):
@@ -275,6 +291,49 @@ def _stopped(ctx: Context, server_pid: Optional[int], server_tid: Optional[int])
                 return (f"pidin shows server thread {th.tid} STOPPED (a signal such as SIGSTOP, or a "
                         f"debugger), so it cannot reply until it is continued.", None)
     return None
+
+
+def _last_state(ctx: Context, pid: Optional[int], tid: Optional[int]) -> Optional[int]:
+    state = None
+    for t, p, th, st in ctx.model.states:
+        if p == pid and th == tid:
+            state = st
+    return state
+
+
+# A read() on a socket, device or pipe reaches the server as _IO_READ and is
+# answered when data comes. While it waits, the thread that took it sits in
+# one of these states (io-sock: CONDVAR) or goes back to MsgReceive.
+READ_TYPES = {0x101, 0x11E}
+WAIT_STATES = {ipc.STATE_RECEIVE, 11, 14, 16, 17}  # RECEIVE, SIGWAITINFO, CONDVAR, INTR, SEM
+
+
+def waits_for_data(ctx: Context, tx: ipc.Transaction) -> bool:
+    """True when a read spent nearly all of its time parked in the server
+    waiting for data, not being served: the client waiting for input, which
+    is not the server's latency. cycle_ms is the check for data that must
+    come in time."""
+    if tx.msg_type not in READ_TYPES or tx.server_tid is None or tx.t_receive is None:
+        return False
+    t1 = tx.t_reply if tx.t_reply is not None else ctx.t_end
+    if t1 <= tx.t_send:
+        return False
+    key = (tx.server_pid, tx.server_tid)
+    state, parked, t = None, 0, tx.t_receive
+    for ts, pid, tid, st in ctx.model.states:
+        if (pid, tid) != key:
+            continue
+        if ts <= tx.t_receive:
+            state = st
+            continue
+        if ts >= t1:
+            break
+        if state in WAIT_STATES:
+            parked += ts - t
+        state, t = st, ts
+    if state in WAIT_STATES:
+        parked += t1 - t
+    return parked >= 0.9 * (t1 - tx.t_send)
 
 
 def _slowest_reply(ctx: Context, client_pid: int, server_pid: Optional[int]) -> Optional[float]:
@@ -374,7 +433,7 @@ def check_reply_budgets(ctx: Context) -> List[Finding]:
         server = ctx.model.name(tx.server_pid)
         budget = ctx.contract.budget_for(server)
         took = ctx.ms(tx.t_reply - tx.t_send)
-        if budget is not None and took > budget:
+        if budget is not None and took > budget and not waits_for_data(ctx, tx):
             slow.setdefault((ctx.model.name(tx.client_pid), server), []).append((took, tx))
     out = []
     for (client, server), items in sorted(slow.items()):
@@ -651,7 +710,8 @@ def _alive_note(ctx: Context, survivor: str, pids: List[int], failed: str) -> st
 
 def _fault(ctx: Context, name: str, pids: List[int]) -> Tuple[Optional[int], str, Optional[int]]:
     """When did `name` fail? Death, or the oldest message it never answered."""
-    deaths = [(ctx.model.deaths[p], ctx.model.death_events[p]) for p in pids if p in ctx.model.deaths]
+    deaths = [(ctx.model.dying.get(p, ctx.model.deaths[p]), ctx.model.death_events[p])
+              for p in pids if p in ctx.model.deaths]
     if deaths:
         t, ev = min(deaths)
         return t, "died", ev
@@ -660,7 +720,7 @@ def _fault(ctx: Context, name: str, pids: List[int]) -> Tuple[Optional[int], str
             return ctx.trace.events[0].t_cycles, "stopped answering before the trace started", None
     budget = ctx.contract.budget_for(name)
     for tx in ctx.model.transactions:
-        if tx.server_pid in pids and tx.status in ("sent", "received"):
+        if tx.server_pid in pids and tx.status in ("sent", "received") and not waits_for_data(ctx, tx):
             if budget is None or ctx.ms(ctx.t_end - tx.t_send) > budget:
                 return tx.t_send, "stopped answering", tx.send_event
     return None, "", None

@@ -1,0 +1,17 @@
+# Draft contract from healthy_plain.kev (not in this folder; 6.0 s, 2 message paths), written by blueprint init.
+# It lists what the system did. Delete every edge you did not design, set the
+# budgets you mean (these are 4x the slowest reply in this one trace;
+# under emulation give more), then run: blueprint check <trace> -c <this file>
+system: socketcan
+processes: [can-read, can-write, io-sock]
+allow:
+  - can-read -> io-sock           # 34 messages, 1 errors
+  - can-write -> io-sock          # 155 messages, 31 errors
+reply_budget_ms:
+  io-sock: 2000                   # slowest reply seen 261.1 ms, median 0.35 ms
+  default: 2000
+# isolation:                     # which process must keep working when another fails
+#   io-sock:
+#     must_survive: [can-read]
+#     min_progress: 3
+# priority_inversion_ms: 2       # experimental, see the README

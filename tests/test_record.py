@@ -18,8 +18,14 @@ class ParseInjection(unittest.TestCase):
         self.assertEqual(Injection.parse("qpp@1.5:stop"), Injection("qpp", 1.5, "stop"))
         self.assertEqual(Injection.parse("qpp@1.5").action, "kill")
 
+    def test_instance_by_command_line(self):
+        i = Injection.parse("io-sock[prefix=/can]@2:stop")
+        self.assertEqual((i.process, i.at, i.action, i.match), ("io-sock", 2.0, "stop", "prefix=/can"))
+        self.assertEqual(i.label, "io-sock[prefix=/can]")
+
     def test_rejects_bad_input(self):
-        for text in ["camera", "@1", "camera@soon", "camera@-1", "cam;reboot@1", "a b@1", "qpp@1:pause"]:
+        for text in ["camera", "@1", "camera@soon", "camera@-1", "cam;reboot@1", "a b@1", "qpp@1:pause",
+                     "io-sock[]@1", "io-sock[a;reboot]@1", "io-sock[a b]@1", "io-sock['x']@1"]:
             with self.assertRaises(RecordError, msg=text):
                 Injection.parse(text)
 
@@ -43,6 +49,17 @@ class RemoteScript(unittest.TestCase):
         self.assertLess(stop, pidin)       # pidin must see the server STOPPED
         self.assertLess(pidin, cont)
         self.assertNotIn("KILL", s)
+
+    def test_instance_is_picked_by_pid_not_by_name(self):
+        # Two io-sock: slay by name would stop the stack ssh runs on as well.
+        s = record.remote_script(4, [Injection("io-sock", 2, "stop", "prefix=/can")])
+        self.assertNotIn("slay", s)
+        self.assertIn("pidin -f anA", s)
+        self.assertIn("-v text=prefix=/can", s)
+        stop, pidin, cont = s.index("kill -s STOP $p"), s.index("pidin >"), s.index("kill -s CONT $p")
+        self.assertLess(stop, pidin)
+        self.assertLess(pidin, cont)
+        self.assertIn('echo "inject io-sock $N', s)
 
     def test_start_command_runs_inside_the_trace(self):
         s = record.remote_script(5, [], start="gps & nav")
