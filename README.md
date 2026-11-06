@@ -176,7 +176,8 @@ This starts a wide trace on the running system, kills `camera` with SIGKILL
 `run.pidin` back and checks them against the contract. Nothing is installed on
 the target: it only needs `tracelogger`, `pidin`, `slay` and `sleep` from a
 stock QNX 8.0 image. `--inject` takes any process from the contract and can be
-repeated. `--start "..."` launches the system inside the trace instead of
+repeated; `--inject qpp@1.5:stop` freezes it with SIGSTOP instead of killing it,
+and continues it after `pidin` has seen it stopped. `--start "..."` launches the system inside the trace instead of
 attaching to one that is already up, and `--ssh "..."` replaces the ssh command
 (for a jump host or a VM in a container). A kill that finds no such process is
 reported, so a test that never broke anything cannot pass by accident.
@@ -332,6 +333,13 @@ only QNX's own services. `blueprint init --all` drafts its map (the shell,
 the process manager, devb-eide, io-sock, pipe, io-usb-otg, eight message
 paths) and the check against that draft passes. See
 [demo/stock/README.md](demo/stock/README.md).
+
+`demo/external/qpp` is BlackBerry's open-source
+[QNX POSIX Publish Subscribe](https://github.com/qnx/qnx-posix-publish-subscribe)
+service, built unchanged and traced healthy, with its server stopped and
+with its server killed. Blueprint names the stopped server and the client
+left REPLY-blocked on it, and the run found four weak spots in Blueprint
+itself, now fixed. See [demo/external/qpp/README.md](demo/external/qpp/README.md).
 
 ## Is the parser right?
 

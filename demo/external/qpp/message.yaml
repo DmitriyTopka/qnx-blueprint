@@ -1,0 +1,17 @@
+# Draft contract from msg_healthy.kev (6.0 s, 2 message paths), written by blueprint init.
+# It lists what the system did. Delete every edge you did not design, set the
+# budgets you mean (these are 4x the slowest reply in this one trace;
+# under emulation give more), then run: blueprint check <trace> -c <this file>
+system: qpp-msg
+processes: [qpp, sample-message-publisher, sample-message-subscriber]
+allow:
+  - sample-message-publisher -> qpp  # 9 messages
+  - sample-message-subscriber -> qpp  # 22 messages, 1 errors
+reply_budget_ms:
+  qpp: 20                         # slowest reply seen 3.1 ms, median 0.34 ms
+  default: 20
+# isolation:                     # which process must keep working when another fails
+#   qpp:
+#     must_survive: [sample-message-publisher]
+#     min_progress: 3
+# priority_inversion_ms: 2       # experimental, see the README

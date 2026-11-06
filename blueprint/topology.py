@@ -101,6 +101,8 @@ def build(model: ipc.IpcModel, only: Optional[Iterable[str]] = None, snap=None) 
         state = model.thread_state.get((pid, tid))
         if state not in (ipc.STATE_SEND, ipc.STATE_REPLY):
             continue  # the thread moved on (e.g. was killed) after the send
+        if model.deaths.get(pid, -1) >= (tx.t_send or 0):
+            continue  # the client process was destroyed later in the trace: nobody waits
         topo.waiters.append(Waiter(
             process=model.name(pid), pid=pid, tid=tid,
             state=ipc.STATE_NAMES[state], server=model.name(tx.server_pid),

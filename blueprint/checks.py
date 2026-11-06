@@ -57,6 +57,7 @@ class Context:
     contract: contract_mod.Contract
     topo: topology.Topology
     t_end: int
+    snap: object = None
 
     def ms(self, cycles: int) -> float:
         return cycles / self.trace.cycles_per_sec * 1000.0 if self.trace.cycles_per_sec else 0.0
@@ -71,7 +72,7 @@ def run(trace: kev.Trace, contract: contract_mod.Contract,
     model = ipc.build(trace)
     topo = topology.build(model, contract.processes, snap)
     t_end = trace.events[-1].t_cycles if trace.events else 0
-    ctx = Context(trace, model, contract, topo, t_end)
+    ctx = Context(trace, model, contract, topo, t_end, snap)
     findings: List[Finding] = []
     findings += check_trace_loss(ctx)
     findings += check_trace_mode(ctx)
@@ -223,6 +224,7 @@ def check_stuck_replies(ctx: Context, cycles: List[List[str]]) -> List[Finding]:
         if slowest is not None and waited < 5 * slowest:
             continue  # a slow server cut off by the end of the trace, not a stuck one
         server_blocked = any(o.process == w.server for o in ctx.topo.waiters)
+        stopped = _stopped(ctx, w.server_pid, tx.server_tid if tx else None)
         # If the contract plans for this server failing, the hang itself is a
         # known failure mode; whether it hurt anyone is the isolation check's call.
         planned = w.server in ctx.contract.isolation
@@ -232,13 +234,47 @@ def check_stuck_replies(ctx: Context, cycles: List[List[str]]) -> List[Finding]:
             f"{w.process} thread {w.tid} has been REPLY-blocked on {w.server} for "
             + (f"{waited:.0f} ms" if w.source == "trace" else f"the whole trace ({waited:.0f} ms) and was already blocked when it started")
             + f" (budget {budget if budget is not None else 'none'} ms). "
-            + ("The server is itself blocked." if server_blocked else
+            + (stopped[0] if stopped else
+               "The server is itself blocked." if server_blocked else
                "The server is not blocked on anyone, so it is stuck in its own code.")
             + (" The contract plans for this server failing, see the isolation check." if planned else ""),
-            [w.process, w.server], [w.send_event] if w.send_event is not None else [],
-            {"waited_ms": round(waited, 1), "tid": w.tid, "from_snapshot": _snapshot_lines([w])},
+            [w.process, w.server],
+            ([w.send_event] if w.send_event is not None else []) + ([stopped[1]] if stopped and stopped[1] is not None else []),
+            {"waited_ms": round(waited, 1), "tid": w.tid, "from_snapshot": _snapshot_lines([w]),
+             "server_stopped": bool(stopped)},
         ))
     return out
+
+
+def _stopped(ctx: Context, server_pid: Optional[int], server_tid: Optional[int]):
+    """(sentence, event index) when a thread of the server is STOPPED (SIGSTOP,
+    a debugger) at the end of the trace, else None. A stopped thread keeps a
+    received message and cannot reply until it is continued."""
+    if server_pid is None:
+        return None
+    last = {}
+    for t, cpu, pid, tid, state, prio, idx in ctx.model.sched:
+        if pid == server_pid:
+            last[tid] = (t, state, idx)
+    for t, pid, tid, state in ctx.model.states:
+        if pid == server_pid and (tid not in last or last[tid][0] < t):
+            last[tid] = (t, state, None)
+    hits = [(tid, t, idx) for tid, (t, state, idx) in last.items() if state == ipc.STATE_STOPPED]
+    if hits:
+        hits.sort(key=lambda h: (h[0] != server_tid, h[1]))
+        tid, t, idx = hits[0]
+        t0 = ctx.trace.events[0].t_cycles if ctx.trace.events else t
+        when = (f"was already STOPPED when the trace started" if ctx.ms(t - t0) < 1.0
+                else f"was STOPPED at {ctx.ms(t - t0):.0f} ms into the trace")
+        return (f"Server thread {tid} {when} (a signal such as SIGSTOP, or a debugger) and stayed "
+                f"stopped, so it cannot reply until it is continued.", idx)
+    snap = ctx.snap
+    if snap is not None:
+        for th in getattr(snap, "threads", []):
+            if th.pid == server_pid and th.state == "STOPPED":
+                return (f"pidin shows server thread {th.tid} STOPPED (a signal such as SIGSTOP, or a "
+                        f"debugger), so it cannot reply until it is continued.", None)
+    return None
 
 
 def _slowest_reply(ctx: Context, client_pid: int, server_pid: Optional[int]) -> Optional[float]:
@@ -579,16 +615,38 @@ def check_isolation(ctx: Context) -> List[Finding]:
                 what = f"{survivor} completed only {progress} messages afterwards"
                 if blocked:
                     what += f" and its thread {blocked[0].tid} is still {blocked[0].state}-blocked on {name}"
+                else:
+                    what += _alive_note(ctx, survivor, pids, name)
                 events = [fault_event] + [b.send_event for b in blocked]
+            title = (f"{name} {fault_kind} and took {survivor} down with it" if died or blocked
+                     else f"{name} {fault_kind} and {survivor} stopped making progress")
             out.append(Finding(
                 "isolation", ERROR,
-                f"{name} {fault_kind} and took {survivor} down with it",
+                title,
                 f"The contract says {survivor} must keep working when {name} fails "
                 f"(at least {rule.min_progress} completed messages). {name} {fault_kind}; {what}.",
                 [name, survivor], sorted({e for e in events if e is not None}),
                 {"fault": fault_kind, "progress": progress, "survivor_died": bool(died)},
             ))
     return out
+
+
+def _alive_note(ctx: Context, survivor: str, pids: List[int], failed: str) -> str:
+    """Why a survivor that is alive and not blocked on the failed server still did nothing."""
+    living = [p for p in pids if p not in ctx.model.deaths]
+    states = sorted({ipc.STATE_NAMES.get(st, str(st)) for (pid, _tid), st in ctx.model.thread_state.items()
+                     if pid in living and st != ipc.STATE_DEAD})
+    if not states and ctx.snap is not None:
+        states = sorted({t.state for t in getattr(ctx.snap, "threads", []) if t.pid in living})
+    servers = sorted({s for (c, s) in ctx.topo.edges if c == survivor and s in ctx.contract.processes})
+    note = ""
+    if states:
+        note += f"; it is still alive ({', '.join(states)}), not blocked on {failed}"
+    if servers == [failed]:
+        note += (f"; {failed} is its only server in the contract, so with {failed} gone it has "
+                 f"nothing to make progress with. If that is acceptable, drop {survivor} from "
+                 f"must_survive; if not, it should notice the failure (an error, a timeout, a reconnect)")
+    return note
 
 
 def _fault(ctx: Context, name: str, pids: List[int]) -> Tuple[Optional[int], str, Optional[int]]:

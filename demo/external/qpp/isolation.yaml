@@ -1,0 +1,19 @@
+# Draft contract from healthy.kev (6.0 s, 3 message paths), written by blueprint init.
+# VARIANT of contract.draft.yaml: only the isolation block was uncommented and must_survive set to sample-signal-consumer.
+# It lists what the system did. Delete every edge you did not design, set the
+# budgets you mean (these are 4x the slowest reply in this one trace;
+# under emulation give more), then run: blueprint check <trace> -c <this file>
+system: qpp
+processes: [echo-actuator, qpp, sample-signal-consumer, sample-signal-publisher]
+allow:
+  - echo-actuator -> qpp          # 14 messages
+  - sample-signal-consumer -> qpp  # 29 messages
+  - sample-signal-publisher -> qpp  # 26 messages, 1 errors
+reply_budget_ms:
+  qpp: 50                         # slowest reply seen 5.3 ms, median 0.14 ms
+  default: 50
+isolation:                       # variant: qpp dies or hangs -> consumer must survive
+  qpp:
+    must_survive: [sample-signal-consumer]
+    min_progress: 3
+# priority_inversion_ms: 2       # experimental, see the README

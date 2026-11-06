@@ -14,8 +14,12 @@ class ParseInjection(unittest.TestCase):
     def test_name_and_time(self):
         self.assertEqual(Injection.parse("camera@1.5"), Injection("camera", 1.5))
 
+    def test_stop_action(self):
+        self.assertEqual(Injection.parse("qpp@1.5:stop"), Injection("qpp", 1.5, "stop"))
+        self.assertEqual(Injection.parse("qpp@1.5").action, "kill")
+
     def test_rejects_bad_input(self):
-        for text in ["camera", "@1", "camera@soon", "camera@-1", "cam;reboot@1", "a b@1"]:
+        for text in ["camera", "@1", "camera@soon", "camera@-1", "cam;reboot@1", "a b@1", "qpp@1:pause"]:
             with self.assertRaises(RecordError, msg=text):
                 Injection.parse(text)
 
@@ -32,6 +36,13 @@ class RemoteScript(unittest.TestCase):
         self.assertLess(wait, pidin)
         self.assertIn("sleep 1.2\n", s)    # 1.5 s minus the 0.3 s start-up pause
         self.assertIn("sleep 1.5\n", s)    # from 1.5 s to 3 s
+
+    def test_stop_is_continued_after_pidin(self):
+        s = record.remote_script(4, [Injection("qpp", 1.5, "stop")])
+        stop, pidin, cont = s.index("STOP qpp"), s.index("pidin >"), s.index("CONT qpp")
+        self.assertLess(stop, pidin)       # pidin must see the server STOPPED
+        self.assertLess(pidin, cont)
+        self.assertNotIn("KILL", s)
 
     def test_start_command_runs_inside_the_trace(self):
         s = record.remote_script(5, [], start="gps & nav")

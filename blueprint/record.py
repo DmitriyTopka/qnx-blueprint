@@ -5,6 +5,7 @@ slay and sleep. Nothing is installed on it. Files come back through `ssh cat`,
 so any ssh command works, including one wrapped in `docker exec`.
 
     blueprint record root@target -c blueprint.yaml --inject camera@1.5 -o run.kev
+    blueprint record root@target -c blueprint.yaml --inject qpp@1.5:stop -o hang.kev
 
 The trace starts first and the kills happen while it runs, so the death of each
 process is in the trace with everything that happened to its clients after it.
@@ -31,12 +32,17 @@ class RecordError(Exception):
 class Injection:
     process: str
     at: float  # seconds after the trace started
+    action: str = "kill"   # kill: SIGKILL; stop: SIGSTOP, continued after the trace and pidin
 
     @staticmethod
     def parse(text: str) -> "Injection":
         name, sep, at = text.partition("@")
         if not name or not sep:
-            raise RecordError(f"--inject wants NAME@SECONDS, got {text!r}")
+            raise RecordError(f"--inject wants NAME@SECONDS or NAME@SECONDS:stop, got {text!r}")
+        at, _, action = at.partition(":")
+        action = action or "kill"
+        if action not in ("kill", "stop"):
+            raise RecordError(f"--inject {text!r}: {action!r} is not kill or stop")
         try:
             value = float(at)
         except ValueError:
@@ -45,7 +51,7 @@ class Injection:
             raise RecordError(f"--inject {text!r}: time must not be negative")
         if not all(c.isalnum() or c in "-_." for c in name):
             raise RecordError(f"--inject {text!r}: {name!r} is not a plain process name")
-        return Injection(name, value)
+        return Injection(name, value, action)
 
 
 def remote_script(duration: float, injections: list[Injection], start: str = "",
@@ -84,13 +90,20 @@ def remote_script(duration: float, injections: list[Injection], start: str = "",
         name = q(inj.process)
         # slay exits with the number of processes it signalled, so 0 means
         # nothing by that name was running.
-        lines.append(f"slay -Q -s KILL {name} >/dev/null 2>&1; "
-                     f"echo \"inject {inj.process} $? $(date +%s)\"")
+        sig = "STOP" if inj.action == "stop" else "KILL"
+        lines.append(f"slay -Q -s {sig} {name} >/dev/null 2>&1; "
+                     f"echo \"inject {inj.process} $? $(date +%s) {inj.action}\"")
     lines += [
         "wait $TL",
         # Threads that were blocked before the trace started emit no events;
         # pidin shows who they wait on.
         "pidin >$D/run.pidin 2>&1",
+    ]
+    # A stopped process is continued only after pidin has seen it STOPPED.
+    for inj in injections:
+        if inj.action == "stop":
+            lines.append(f"slay -Q -s CONT {q(inj.process)} >/dev/null 2>&1")
+    lines += [
         "ls -l $D/run.kev >&2",
     ]
     return "\n".join(lines) + "\n"
@@ -117,10 +130,11 @@ def record(host: str, out: str, duration: float, injections: list[Injection],
     log = []
     for line in proc.stdout.decode(errors="replace").splitlines():
         parts = line.split()
-        if len(parts) == 4 and parts[0] == "inject":
+        if len(parts) in (4, 5) and parts[0] == "inject":
             killed = int(parts[2]) if parts[2].isdigit() else 0
             log.append({"process": parts[1], "killed": killed, "hit": killed > 0,
-                        "target_time": int(parts[3]) if parts[3].isdigit() else None})
+                        "target_time": int(parts[3]) if parts[3].isdigit() else None,
+                        "action": parts[4] if len(parts) == 5 else "kill"})
     stem = out[:-4] if out.endswith(".kev") else out
     files = {f"{REMOTE_DIR}/run.kev": stem + ".kev", f"{REMOTE_DIR}/run.pidin": stem + ".pidin"}
     os.makedirs(os.path.dirname(os.path.abspath(stem)), exist_ok=True)
@@ -133,7 +147,7 @@ def record(host: str, out: str, duration: float, injections: list[Injection],
             f.write(got.stdout)
     run(base + ["rm", "-rf", REMOTE_DIR], capture_output=True, timeout=30)
     result = {"host": host, "duration_s": duration, "start": start or None,
-              "injections": [{"process": i.process, "at_s": i.at} for i in injections],
+              "injections": [{"process": i.process, "at_s": i.at, "action": i.action} for i in injections],
               "log": log, "trace": stem + ".kev", "snapshot": stem + ".pidin"}
     with open(stem + ".inject.json", "w", encoding="utf-8") as f:
         json.dump(result, f, indent=2)
@@ -145,9 +159,11 @@ def check_injections(result: dict, deaths: list[str]) -> list[str]:
     death did not make it into the trace."""
     warnings = []
     for entry in result["log"]:
+        stop = entry.get("action") == "stop"
         if not entry["hit"]:
-            warnings.append(f"{entry['process']} was not running when Blueprint tried to kill it")
-        elif entry["process"] not in deaths:
+            warnings.append(f"{entry['process']} was not running when Blueprint tried to "
+                            f"{'stop' if stop else 'kill'} it")
+        elif not stop and entry["process"] not in deaths:
             warnings.append(f"{entry['process']} was killed but its death is not in the trace "
                             f"(trace buffer too small?)")
     return warnings
@@ -156,5 +172,6 @@ def check_injections(result: dict, deaths: list[str]) -> list[str]:
 def print_log(result: dict, out=None) -> None:
     out = out or sys.stdout
     for entry in result["log"]:
-        state = f"killed {entry['killed']} process(es)" if entry["hit"] else "NOT RUNNING"
+        verb = "stopped (continued after the trace)" if entry.get("action") == "stop" else "killed"
+        state = f"{verb} {entry['killed']} process(es)" if entry["hit"] else "NOT RUNNING"
         print(f"inject {entry['process']}: {state}", file=out)
