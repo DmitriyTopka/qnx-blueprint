@@ -25,7 +25,20 @@ like and tells you where it does not.
 **See it without installing anything:** the reports for every recorded
 scenario and the codelab are at
 [dmitriytopka.github.io/qnx-blueprint](https://dmitriytopka.github.io/qnx-blueprint/).
-A 1:49 video of all of it: [youtu.be/rqJFxPH5Bjs](https://youtu.be/rqJFxPH5Bjs).
+A 2:53 video of all of it: [youtu.be/rqJFxPH5Bjs](https://youtu.be/rqJFxPH5Bjs).
+
+## For judges
+
+Links point at release v0.3.0, so the lines stay where they are.
+
+| Criterion | Where to look | What it shows |
+|---|---|---|
+| Technological Implementation | [`kev.py`](https://github.com/DmitriyTopka/qnx-blueprint/blob/v0.3.0/blueprint/kev.py), [`ipc.py`](https://github.com/DmitriyTopka/qnx-blueprint/blob/v0.3.0/blueprint/ipc.py), [`checks.py`](https://github.com/DmitriyTopka/qnx-blueprint/blob/v0.3.0/blueprint/checks.py), [docs/TRACEPRINTER.md](https://github.com/DmitriyTopka/qnx-blueprint/blob/v0.3.0/docs/TRACEPRINTER.md) | the trace format read from scratch and compared with QNX's `traceprinter`: 1,071,509 events in 25 traces, none missing or different; 137 tests |
+| Design | `blueprint demo`, [the reports](https://dmitriytopka.github.io/qnx-blueprint/), [`action.yml`](https://github.com/DmitriyTopka/qnx-blueprint/blob/v0.3.0/action.yml) | one command with no target, an HTML report, JUnit XML and a GitHub Action for CI |
+| Potential Impact | [demo/external/qpp](https://github.com/DmitriyTopka/qnx-blueprint/tree/v0.3.0/demo/external/qpp), [demo/external/socketcan](https://github.com/DmitriyTopka/qnx-blueprint/tree/v0.3.0/demo/external/socketcan) | two BlackBerry systems we did not write: a stopped server found, and eight weak spots in Blueprint fixed on their traces |
+| Innovation & AI Creativity | [`explain.py`](https://github.com/DmitriyTopka/qnx-blueprint/blob/v0.3.0/blueprint/explain.py), [`review.py`](https://github.com/DmitriyTopka/qnx-blueprint/blob/v0.3.0/blueprint/review.py), [`mcp_server.py`](https://github.com/DmitriyTopka/qnx-blueprint/blob/v0.3.0/blueprint/mcp_server.py) | Claude explains and reviews but never judges; an event id it cites that the trace does not have is dropped |
+| Codelab bonus | [the contract codelab](https://dmitriytopka.github.io/qnx-blueprint/codelab/), [the secure-image codelab](https://dmitriytopka.github.io/qnx-blueprint/codelab/secure-image/) | a secure QNX 8.0 image from a policy you can check, with [a recorded live run](https://youtu.be/OHoixOUmPH8) |
+| QNX-specific bonus | [demo/cockpit/secpol/evidence](https://github.com/DmitriyTopka/qnx-blueprint/tree/v0.3.0/demo/cockpit/secpol/evidence) | `mkqnximage --secpol=secure` on x86_64 and aarch64: serial logs, the compiled policy matching `/proc/boot/secpol.bin`, the kernel saying `Operation not permitted` |
 
 ## Try it in one minute
 
@@ -303,7 +316,7 @@ stays a command you run yourself.
 ## In CI
 
 ```yaml
-- uses: DmitriyTopka/qnx-blueprint@v0.2.0
+- uses: DmitriyTopka/qnx-blueprint@v0.3.0
   with:
     trace: traces/nightly.kev
     contract: blueprint.yaml
