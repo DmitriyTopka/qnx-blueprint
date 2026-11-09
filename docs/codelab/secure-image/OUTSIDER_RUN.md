@@ -70,3 +70,15 @@ check had no exact command, `traceprinter | grep -m1` also prints a broken
 pipe line, and the first login to a secure image can take about 20 seconds.
 Its numbers: line 209 for the backdoor rule, 193 refusals in the trace, the
 same md5 on host and target.
+
+## Fourth run, a check of release v0.3.0
+
+On 9 November 2026 a fresh agent, again not a person, followed the codelab
+from an empty folder on Ubuntu 22.04 with one shell for everything. All steps
+worked and the md5 matched on host and target. It found that the system pip
+of Ubuntu 22.04 installs the `blueprint` command as an empty `UNKNOWN`
+package without an error; the codelab now installs it in a virtual
+environment. It also found that the interactive session needs a second
+terminal, that "log in two more times" was one login and two copies, and
+that the refusal count in the trace block did not match the text. Its trace
+caught 89 refusals.

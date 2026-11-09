@@ -51,9 +51,11 @@ python3 -m pip install .
 blueprint demo
 ```
 
-Without a clone, `python3 -m pip install git+https://github.com/DmitriyTopka/qnx-blueprint`
-installs the same recorded traces with the package, and `blueprint demo` runs
-from any directory.
+Without a clone, `pip install git+https://github.com/DmitriyTopka/qnx-blueprint`
+in the same environment installs the same recorded traces with the package,
+and `blueprint demo` runs from any directory. Use a virtual environment on
+Ubuntu 22.04: its system pip installs the package as an empty `UNKNOWN`
+without an error.
 
 ```
 scenario              expected  got   checks                            story

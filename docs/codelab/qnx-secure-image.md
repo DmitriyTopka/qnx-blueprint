@@ -82,9 +82,15 @@ Display must never read gps directly. The program has a switch,
 the policy does with it.
 
 Positive
-: Optional: `python3 -m pip install $LAB/../qnx-blueprint` gives you the
-`blueprint` command used in two steps to check policies and traces against
-the contract. Each of those steps also shows how to do it by hand.
+: Optional: the `blueprint` command, used in two steps to check policies and
+traces against the contract. Each of those steps also shows how to do it by
+hand. Install it in a virtual environment: on Ubuntu 22.04 the system pip
+installs it as an empty `UNKNOWN` package without saying so.
+
+```console
+python3 -m venv $LAB/.venv && $LAB/.venv/bin/pip install $LAB/../qnx-blueprint
+export PATH=$LAB/.venv/bin:$PATH && blueprint --help
+```
 
 ---
 
@@ -137,8 +143,10 @@ qemu-system-x86_64 -m 1G -smp 2 -cpu max -display none -serial file:serial.log \
 To reboot this image later, run `kill %1` in the same shell (or kill that
 qemu process) and start the same line again.
 
-When `serial.log` says `Startup complete` (about 10 seconds), open an
-interactive session. The `#` lines below are typed in it:
+When `serial.log` says `Startup complete` (about 10 seconds), open a second
+terminal for an interactive session on the target, and keep this one for the
+host: QEMU is its job, so `kill %1` only works here. The `#` lines below are
+typed in the second terminal:
 
 ```console
 ssh -p 2230 root@localhost
@@ -176,8 +184,8 @@ The shell also prints job lines such as `[1] 704534` when a server starts
 and `[4] + Killed ...` after `slay`. They are not shown here; ignore them.
 
 Do everything else the finished system will have to do, because anything not
-learned now is refused later. From the host, log in two more times and copy
-a file both ways:
+learned now is refused later. From the host terminal, log in once more and
+copy a file both ways:
 
 ```console
 ssh -p 2230 root@localhost true
@@ -452,7 +460,7 @@ kernel call that returns -1 with errno 1, `EPERM`:
 
 ```console
 # traceprinter -f /tmp/backdoor.kev | grep -c "CONNECT_ATTACH.*errno:1"
-104
+182
 # traceprinter -f /tmp/backdoor.kev | grep -m1 "CONNECT_ATTACH.*errno:1"
 t:0x51f9c73a9 CPU:01 KER_EXIT        :CONNECT_ATTACH/39  ret_val:-1, errno:1
 fprintf() failed with 32 (Broken pipe)
@@ -461,8 +469,8 @@ fprintf() failed with 32 (Broken pipe)
 
 The count depends on how many of display's retries the trace caught: the
 program tries `name_open()` 200 times, 20 ms apart. With the one-line start
-above we saw 182 and 193; with a trace started by hand a few seconds earlier, 104
-and 84. What must hold is that it is not zero. Copy the trace to
+above we saw 89, 182 and 193; with a trace started by hand a few seconds
+earlier, 104 and 84. What must hold is that it is not zero. Copy the trace to
 the host and let Blueprint say who tried to reach whom:
 
 ```console
