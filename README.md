@@ -22,6 +22,8 @@ YAML, the contract.
 System Profiler shows you a trace. Blueprint knows what the trace should look
 like and tells you where it does not.
 
+![One contract, checked in CI against the kernel trace and enforced by the kernel as a security policy](docs/img/how-it-works.svg)
+
 **See it without installing anything:** the reports for every recorded
 scenario and the codelab are at
 [dmitriytopka.github.io/qnx-blueprint](https://dmitriytopka.github.io/qnx-blueprint/).
@@ -170,6 +172,8 @@ took it spent the wait parked (CONDVAR, SEM, back in MsgReceive), it counts
 neither against `reply_budget_ms` nor as a stuck reply. If the data must come
 in time, give the client a `cycle_ms`.
 
+![The HTML report for the hung camera: the broken edge in red, the finding first, the trace events behind it](docs/codelab/img/report-camera-hang.png)
+
 Every finding lists the trace events it is based on. Exit code 0 means pass,
 1 means the contract is violated, 2 means bad input.
 
@@ -244,6 +248,8 @@ the system was already stuck before tracing started: blocked threads produce no
 events, and only `pidin` shows who waits on whom.
 
 ## Let the kernel enforce it
+
+![The learned policy fails against the contract, and the kernel refuses the backdoor in secure mode](docs/codelab/img/kernel-denies.png)
 
 A trace shows what the system did. A QNX security policy decides what it may
 do. Blueprint writes the channel rules of a policy from the contract:
@@ -446,6 +452,24 @@ before it went into the code or the docs, and several first guesses did not
 survive that: the pid in a send event, what a send timeout does on a
 name_attach channel, which errno a denied connection gets, why a learned
 policy had no rules. The commit history shows the work as it happened.
+
+## AI use
+
+- **Building it.** Claude Code (Anthropic) wrote most of the code and the
+  docs as the coding agent, directed and reviewed by the author. Every claim
+  about QNX was checked on a running QNX 8.0 target first, and the tests and
+  recorded traces in this repository are the evidence.
+- **Inside the tool.** `--explain` and `init --review` call `claude-opus-5-5`,
+  and the MCP server lets a coding assistant run the checks itself. The model
+  explains and suggests; the checks alone decide pass or fail, and any event
+  id it cites that the trace does not have is removed. Without an API key
+  every check still runs.
+- **The videos.** The narration is an AI clone of the author's own voice, and
+  the typing in the terminal recordings is replayed; the commands and their
+  output are real runs on QNX 8.0 in QEMU.
+- **The codelab checks.** Its four test runs from an empty folder were made by
+  AI agents, not people, and are reported as such in
+  [OUTSIDER_RUN.md](docs/codelab/secure-image/OUTSIDER_RUN.md).
 
 ## License
 
