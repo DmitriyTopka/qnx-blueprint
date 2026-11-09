@@ -46,6 +46,14 @@ No QNX target, SDP or API key needed. The repository ships traces recorded on
 QNX 8.0 (x86_64, QEMU) from the demo system in `demo/cockpit`.
 
 ```
+pip install qnx-blueprint
+blueprint demo
+```
+
+The package is on [PyPI](https://pypi.org/project/qnx-blueprint/) and carries
+the recorded traces. From a clone:
+
+```
 python3 -m venv .venv && . .venv/bin/activate      # or any Python 3.10+ environment
 python3 -m pip install .
 blueprint demo
