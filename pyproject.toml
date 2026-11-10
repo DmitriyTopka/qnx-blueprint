@@ -1,6 +1,6 @@
 [project]
 name = "qnx-blueprint"
-version = "0.3.1"
+version = "0.3.2"
 description = "Architecture contracts for QNX 8.0 systems, checked against kernel traces"
 readme = "README.md"
 license = "Apache-2.0"

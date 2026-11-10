@@ -279,6 +279,15 @@ def cmd_mcp(args: argparse.Namespace) -> int:
     return mcp_server.main()
 
 
+def _shown(path: str) -> str:
+    """The path as the report shows it: relative to here when it can be. On
+    Windows a package on C: seen from a folder on D: has no relative path."""
+    try:
+        return os.path.relpath(path)
+    except ValueError:
+        return path
+
+
 def cmd_demo(args: argparse.Namespace) -> int:
     import yaml
 
@@ -327,7 +336,7 @@ def cmd_demo(args: argparse.Namespace) -> int:
                     pass
         stem = os.path.join(args.out, sc["name"])
         with open(stem + ".html", "w", encoding="utf-8") as f:
-            f.write(report.render(trace, model, con, findings, topo, os.path.relpath(trace_path), explanations))
+            f.write(report.render(trace, model, con, findings, topo, _shown(trace_path), explanations))
         perfetto.write(stem + ".perfetto.json", perfetto.export(trace, model, con.processes, findings))
         mark = "" if ok else "  <-- UNEXPECTED"
         print(f"{sc['name']:<22}{sc['expect']:<10}{got:<6}{', '.join(got_checks) or '-':<34}{sc['story']}{mark}")
