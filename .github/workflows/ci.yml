@@ -17,6 +17,20 @@ jobs:
         with:
           name: demo-reports
           path: demo-out
+  judge-install:
+    # What a judge gets: the PyPI package on a clean machine, no clone, no QNX.
+    strategy:
+      fail-fast: false
+      matrix:
+        os: [windows-latest, macos-latest, ubuntu-22.04]
+        python: ["3.10", "3.12"]
+    runs-on: ${{ matrix.os }}
+    steps:
+      - uses: actions/setup-python@v7
+        with:
+          python-version: ${{ matrix.python }}
+      - run: python -m pip install qnx-blueprint
+      - run: blueprint demo --out demo-out
   action-pass:
     runs-on: ubuntu-latest
     steps:
