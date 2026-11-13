@@ -33,8 +33,8 @@ it cannot see at all. In this codelab you will:
 6. watch the kernel refuse a backdoor, and find each refusal in a kernel trace.
 
 No hardware is needed. The outputs here come from a run from scratch on
-5 November 2026 with QNX SDP 8.0 and QEMU; a second reader then followed the
-codelab word for word, and their report is in
+5 November 2026 with QNX SDP 8.0 and QEMU; a second reader, an AI agent with
+no access to our notes, then followed the codelab word for word, and its report is in
 [docs/codelab/secure-image/OUTSIDER_RUN.md](https://github.com/DmitriyTopka/qnx-blueprint/blob/main/docs/codelab/secure-image/OUTSIDER_RUN.md).
 Some numbers change from run to run: the length of the learned policy, the
 order of types in a rule, the md5 of your policy and how many refusals a
