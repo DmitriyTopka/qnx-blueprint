@@ -318,7 +318,7 @@ demo and CI runs work offline. One explanation costs about 0.06 USD with
 ## For coding assistants (MCP)
 
 ```
-python3 -m pip install "qnx-blueprint[mcp] @ git+https://github.com/DmitriyTopka/qnx-blueprint"
+pip install "qnx-blueprint[mcp]"
 blueprint mcp
 ```
 
