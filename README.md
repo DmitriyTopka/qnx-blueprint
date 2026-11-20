@@ -27,7 +27,11 @@ like and tells you where it does not.
 **See it without installing anything:** the reports for every recorded
 scenario and the codelab are at
 [dmitriytopka.github.io/qnx-blueprint](https://dmitriytopka.github.io/qnx-blueprint/).
-A 2:53 video of all of it: [youtu.be/rqJFxPH5Bjs](https://youtu.be/rqJFxPH5Bjs).
+A 2:52 video of all of it: [youtu.be/rqJFxPH5Bjs](https://youtu.be/rqJFxPH5Bjs).
+
+A PASS means this trace broke none of the contract's rules. It says nothing about
+paths the trace never exercised, and waits that began before the trace need a
+`pidin` snapshot to be seen.
 
 ## For judges
 
