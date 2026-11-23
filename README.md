@@ -40,9 +40,9 @@ Links point at release v0.3.2, so the lines stay where they are.
 | Criterion | Where to look | What it shows |
 |---|---|---|
 | Technological Implementation | [`kev.py`](https://github.com/DmitriyTopka/qnx-blueprint/blob/v0.3.2/blueprint/kev.py), [`ipc.py`](https://github.com/DmitriyTopka/qnx-blueprint/blob/v0.3.2/blueprint/ipc.py), [`checks.py`](https://github.com/DmitriyTopka/qnx-blueprint/blob/v0.3.2/blueprint/checks.py), [docs/TRACEPRINTER.md](https://github.com/DmitriyTopka/qnx-blueprint/blob/v0.3.2/docs/TRACEPRINTER.md) | the trace format read from scratch and compared with QNX's `traceprinter`: 1,071,509 events in 25 traces, none missing or different; 137 tests |
-| Design | `blueprint demo`, [the reports](https://dmitriytopka.github.io/qnx-blueprint/), [`action.yml`](https://github.com/DmitriyTopka/qnx-blueprint/blob/v0.3.2/action.yml) | one command with no target, an HTML report, JUnit XML and a GitHub Action for CI |
+| Design | `blueprint demo`, [the reports](https://dmitriytopka.github.io/qnx-blueprint/), [`action.yml`](https://github.com/DmitriyTopka/qnx-blueprint/blob/v0.3.2/action.yml) | one command with no target: after a clean `pip install` it writes 15 HTML reports in 3.6 s on an M2 Mac; JUnit XML and a GitHub Action for CI |
 | Potential Impact | [demo/external/qpp](https://github.com/DmitriyTopka/qnx-blueprint/tree/v0.3.2/demo/external/qpp), [demo/external/socketcan](https://github.com/DmitriyTopka/qnx-blueprint/tree/v0.3.2/demo/external/socketcan) | two BlackBerry systems we did not write: a stopped server found, and eight weak spots in Blueprint fixed on their traces |
-| Innovation & AI Creativity | [`explain.py`](https://github.com/DmitriyTopka/qnx-blueprint/blob/v0.3.2/blueprint/explain.py), [`review.py`](https://github.com/DmitriyTopka/qnx-blueprint/blob/v0.3.2/blueprint/review.py), [`mcp_server.py`](https://github.com/DmitriyTopka/qnx-blueprint/blob/v0.3.2/blueprint/mcp_server.py) | Claude explains and reviews but never judges; an event id it cites that the trace does not have is dropped |
+| Innovation & AI Creativity | [`explain.py`](https://github.com/DmitriyTopka/qnx-blueprint/blob/v0.3.2/blueprint/explain.py), [`review.py`](https://github.com/DmitriyTopka/qnx-blueprint/blob/v0.3.2/blueprint/review.py), [`mcp_server.py`](https://github.com/DmitriyTopka/qnx-blueprint/blob/v0.3.2/blueprint/mcp_server.py) | Claude explains and reviews but never judges: the 14 explanations and one review on record cite 140 trace events, and each id is checked against the events Claude was given; one it was not given is dropped |
 | Codelab bonus | [the contract codelab](https://dmitriytopka.github.io/qnx-blueprint/codelab/), [the secure-image codelab](https://dmitriytopka.github.io/qnx-blueprint/codelab/secure-image/) | a secure QNX 8.0 image from a policy you can check, with [a recorded live run](https://youtu.be/OHoixOUmPH8). Submitted to the QNX codelabs repository as [pull request #74](https://github.com/qnx/codelabs/pull/74), which the organizers confirmed is what enters it for the Best Codelab prize |
 | QNX-specific bonus | [demo/cockpit/secpol/evidence](https://github.com/DmitriyTopka/qnx-blueprint/tree/v0.3.2/demo/cockpit/secpol/evidence) | `mkqnximage --secpol=secure` on x86_64 and aarch64: serial logs, the compiled policy matching `/proc/boot/secpol.bin`, the kernel saying `Operation not permitted` |
 
@@ -388,6 +388,17 @@ bus, with the CAN stack stopped and killed under its clients. Its blocking
 reads made Blueprint fail a healthy system; that and three more weak spots
 are fixed. The prebuilt module needed a small shim of ours to load, see
 [demo/external/socketcan/README.md](demo/external/socketcan/README.md).
+
+## Against a plain liveness check
+
+How much would a simple health check catch? We ran one over the same 23
+traces: fail the build if a server in the contract died. It caught 4 of the
+15 runs Blueprint fails, all four of them deaths. It missed the other 11, five
+hangs, two deadlocks, two backdoors and two timing faults, because in each of
+them every process was still alive. And it failed one healthy design,
+`camera-dies-fixed`, where the camera dies and the display keeps working as
+the contract asks. To rerun it from a clone:
+`PYTHONPATH=. python tools/baseline_liveness.py`.
 
 ## Is the parser right?
 
